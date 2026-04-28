@@ -8,6 +8,8 @@ import {
   EnvironmentOutlined,
   ShopOutlined,
   DashboardOutlined,
+  ClockCircleOutlined,
+  AlertOutlined,
 } from "@ant-design/icons";
 import "@refinedev/antd/dist/reset.css";
 
@@ -20,6 +22,9 @@ import { PlantList }     from "./pages/plants/list";
 import { PlantCreate, PlantEdit } from "./pages/plants/form";
 import { ClientList }    from "./pages/clients/list";
 import { ClientCreate, ClientEdit } from "./pages/clients/form";
+import { ShiftTypeList }             from "./pages/shifts/list";
+import { ShiftTypeCreate, ShiftTypeEdit } from "./pages/shifts/form";
+import { SupervisorDashboard }       from "./pages/supervisor/dashboard";
 
 const Dashboard = () => (
   <div style={{ padding: 24 }}>
@@ -69,6 +74,18 @@ export default function App() {
                 edit:   "/clients/edit/:id",
                 meta:   { label: "Clientes", icon: <ShopOutlined /> },
               },
+              {
+                name:   "shifts",
+                list:   "/shifts",
+                create: "/shifts/create",
+                edit:   "/shifts/edit/:id",
+                meta:   { label: "Turnos", icon: <ClockCircleOutlined /> },
+              },
+              {
+                name: "supervisor",
+                list: "/supervisor",
+                meta: { label: "Supervisor", icon: <AlertOutlined /> },
+              },
             ]}
             options={{ syncWithLocation: true, warnWhenUnsavedChanges: true }}
           >
@@ -103,22 +120,30 @@ export default function App() {
                 <Route index element={<Dashboard />} />
 
                 <Route path="/employees">
-                  <Route index       element={<EmployeeList />} />
-                  <Route path="create"    element={<EmployeeCreate />} />
-                  <Route path="edit/:id"  element={<EmployeeEdit />} />
+                  <Route index          element={<EmployeeList />} />
+                  <Route path="create"  element={<EmployeeCreate />} />
+                  <Route path="edit/:id" element={<EmployeeEdit />} />
                 </Route>
 
                 <Route path="/plants">
-                  <Route index       element={<PlantList />} />
-                  <Route path="create"    element={<PlantCreate />} />
-                  <Route path="edit/:id"  element={<PlantEdit />} />
+                  <Route index          element={<PlantList />} />
+                  <Route path="create"  element={<PlantCreate />} />
+                  <Route path="edit/:id" element={<PlantEdit />} />
                 </Route>
 
                 <Route path="/clients">
-                  <Route index       element={<ClientList />} />
-                  <Route path="create"    element={<ClientCreate />} />
-                  <Route path="edit/:id"  element={<ClientEdit />} />
+                  <Route index          element={<ClientList />} />
+                  <Route path="create"  element={<ClientCreate />} />
+                  <Route path="edit/:id" element={<ClientEdit />} />
                 </Route>
+
+                <Route path="/shifts">
+                  <Route index          element={<ShiftTypeList />} />
+                  <Route path="create"  element={<ShiftTypeCreate />} />
+                  <Route path="edit/:id" element={<ShiftTypeEdit />} />
+                </Route>
+
+                <Route path="/supervisor" element={<SupervisorDashboard />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" />} />

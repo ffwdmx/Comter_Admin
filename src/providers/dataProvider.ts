@@ -46,7 +46,7 @@ const resourceMap: Record<string, string> = {
 const getPath = (resource: string) => resourceMap[resource] ?? `/${resource}`;
 
 export const dataProvider: DataProvider = {
-  getList: async ({ resource, pagination, filters, sorters }) => {
+  getList: async ({ resource, pagination: _p, filters: _f, sorters: _s }) => {
     const path = getPath(resource);
     const { data } = await axiosInstance.get(path);
     const list = Array.isArray(data) ? data : data.items ?? [];

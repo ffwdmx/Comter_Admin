@@ -4,7 +4,7 @@ import { UserOutlined, LockOutlined } from "@ant-design/icons";
 import { useState } from "react";
 
 export const LoginPage = () => {
-  const { mutate: login, isLoading } = useLogin<{ username: string; password: string }>();
+  const { mutate: login, isPending } = useLogin<{ username: string; password: string }>();
   const [error, setError] = useState<string | null>(null);
 
   const onFinish = (values: { username: string; password: string }) => {
@@ -79,7 +79,7 @@ export const LoginPage = () => {
             <Button
               type="primary"
               htmlType="submit"
-              loading={isLoading}
+              loading={isPending}
               block
               style={{
                 height: 48,

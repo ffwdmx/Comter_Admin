@@ -1,9 +1,8 @@
-import { Refine, Authenticated, useGetIdentity, useLogout } from "@refinedev/core";
+import { Refine, Authenticated } from "@refinedev/core";
 import { RefineThemes, ThemedLayout, ThemedSider, useNotificationProvider } from "@refinedev/antd";
 import routerProvider from "@refinedev/react-router";
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
-import { ConfigProvider, App as AntApp, Typography, Avatar, Dropdown } from "antd";
-import { LogoutOutlined, UserOutlined } from "@ant-design/icons";
+import { ConfigProvider, App as AntApp, Typography } from "antd";
 import {
   TeamOutlined,
   EnvironmentOutlined,
@@ -26,40 +25,6 @@ import { ClientCreate, ClientEdit } from "./pages/clients/form";
 import { ShiftTypeList }             from "./pages/shifts/list";
 import { ShiftTypeCreate, ShiftTypeEdit } from "./pages/shifts/form";
 import { SupervisorDashboard }       from "./pages/supervisor/dashboard";
-
-const CustomHeader = () => {
-  const { data: identity } = useGetIdentity<{ name: string; role: string }>();
-  const { mutate: logout } = useLogout();
-
-  const menuItems = [
-    {
-      key: "logout",
-      icon: <LogoutOutlined />,
-      label: "Cerrar sesión",
-      danger: true,
-      onClick: () => logout(),
-    },
-  ];
-
-  return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "flex-end",
-      padding: "0 24px",
-      height: "100%",
-    }}>
-      <Dropdown menu={{ items: menuItems }} trigger={["click"]} placement="bottomRight">
-        <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-          <Avatar size={32} icon={<UserOutlined />} style={{ backgroundColor: "#1B3A6B" }} />
-          <Typography.Text strong style={{ fontSize: 14 }}>
-            {identity?.name ?? "Administrador"}
-          </Typography.Text>
-        </div>
-      </Dropdown>
-    </div>
-  );
-};
 
 const Dashboard = () => (
   <div style={{ padding: 24 }}>
@@ -131,15 +96,19 @@ export default function App() {
                 element={
                   <Authenticated key="auth" fallback={<Navigate to="/login" />}>
                     <ThemedLayout
-                      Header={CustomHeader}
                       Sider={() => (
                         <ThemedSider
                           Title={({ collapsed }) => (
                             <div style={{ padding: "12px 8px", textAlign: "center" }}>
-                              {collapsed
-                                ? <img src="/comter_logo_short.png" alt="Comter" style={{ height: 52, objectFit: "contain" }} />
-                                : <img src="/comter_logo_short.png" alt="Comter" style={{ height: 64, objectFit: "contain" }} />
-                              }
+                              <img
+                                src="/comter_logo_short.png"
+                                alt="Comter"
+                                style={{
+                                  height: collapsed ? 40 : 56,
+                                  objectFit: "contain",
+                                  transition: "height 0.2s",
+                                }}
+                              />
                             </div>
                           )}
                         />

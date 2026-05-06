@@ -348,7 +348,7 @@ const EmployeeFormFields = ({
       </Form.Item>
 
       <Form.Item label="Email" name="email"
-        rules={[{ required: true, type: "email", message: "Email inválido" }]}>
+        rules={[{ type: "email", message: "Email inválido" }]}>
         <Input placeholder="empleado@comter.mx" />
       </Form.Item>
 

@@ -375,8 +375,7 @@ const EmployeeFormFields = ({
 
       {/* ── Rol y planta ───────────────────────────────────────────────── */}
       <Form.Item label="Rol" name="role"
-        rules={[{ required: true, message: "Requerido" }]}
-        initialValue="employee">
+        rules={[{ required: true, message: "Requerido" }]}>
         <Select options={roleOptions} />
       </Form.Item>
 
@@ -545,8 +544,15 @@ const EmployeeFormFields = ({
 export const EmployeeCreate = () => {
   const { formProps, saveButtonProps } = useForm();
   return (
-    <Create saveButtonProps={saveButtonProps} title="Nuevo Empleado">
-      <Form {...formProps} layout="vertical">
+    <Create
+      saveButtonProps={{ ...saveButtonProps, children: "Guardar" }}
+      title="Nuevo Empleado"
+    >
+      <Form
+        {...formProps}
+        layout="vertical"
+        initialValues={{ role: "employee", ...formProps.initialValues }}
+      >
         <EmployeeFormFields isEdit={false} />
       </Form>
     </Create>
@@ -556,7 +562,10 @@ export const EmployeeCreate = () => {
 export const EmployeeEdit = () => {
   const { formProps, saveButtonProps, id } = useForm();
   return (
-    <Edit saveButtonProps={saveButtonProps} title="Editar Empleado">
+    <Edit
+      saveButtonProps={{ ...saveButtonProps, children: "Guardar" }}
+      title="Editar Empleado"
+    >
       <Form {...formProps} layout="vertical">
         <EmployeeFormFields isEdit={true} employeeId={id ? Number(id) : undefined} />
         {id && <ShiftAssignmentSection employeeId={Number(id)} />}

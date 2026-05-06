@@ -283,89 +283,6 @@ const AddressSection = ({
   );
 };
 
-// ── Sección Cambiar Contraseña ─────────────────────────────────────────────
-
-const ChangePasswordSection = ({ employeeId }: { employeeId: number }) => {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [saving, setSaving]       = useState(false);
-  const [passForm]                = Form.useForm();
-
-  const onSave = async (values: { password: string; confirm: string }) => {
-    setSaving(true);
-    try {
-      await axiosInstance.patch(`/employees/${employeeId}/password`, {
-        password: values.password,
-      });
-      message.success("Contraseña actualizada correctamente");
-      setModalOpen(false);
-      passForm.resetFields();
-    } catch (err: any) {
-      message.error(err?.response?.data?.detail ?? "Error al cambiar la contraseña");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <>
-      <Divider orientation="left" style={{ marginTop: 24 }}>
-        <Space>
-          <LockOutlined />
-          Acceso al sistema
-        </Space>
-      </Divider>
-
-      <Button
-        icon={<LockOutlined />}
-        onClick={() => setModalOpen(true)}
-        style={{ marginBottom: 16 }}
-      >
-        Cambiar contraseña
-      </Button>
-
-      <Modal
-        open={modalOpen}
-        title="Cambiar contraseña del empleado"
-        onCancel={() => { setModalOpen(false); passForm.resetFields(); }}
-        onOk={() => passForm.submit()}
-        okText="Guardar"
-        confirmLoading={saving}
-      >
-        <Form form={passForm} layout="vertical" onFinish={onSave} style={{ marginTop: 8 }}>
-          <Form.Item
-            label="Nueva contraseña"
-            name="password"
-            rules={[
-              { required: true, message: "Requerido" },
-              { min: 6, message: "Mínimo 6 caracteres" },
-            ]}
-          >
-            <Input.Password placeholder="Mínimo 6 caracteres" />
-          </Form.Item>
-          <Form.Item
-            label="Confirmar contraseña"
-            name="confirm"
-            dependencies={["password"]}
-            rules={[
-              { required: true, message: "Requerido" },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue("password") === value) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject("Las contraseñas no coinciden");
-                },
-              }),
-            ]}
-          >
-            <Input.Password placeholder="Repite la contraseña" />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </>
-  );
-};
-
 // ── Helpers de validación ──────────────────────────────────────────────────
 
 const CURP_RE = /^[A-Z]{4}[0-9]{6}[HM][A-Z]{2}[A-Z]{3}[0-9A-Z][0-9]$/;
@@ -644,16 +561,85 @@ export const EmployeeCreate = () => {
 
 export const EmployeeEdit = () => {
   const { formProps, saveButtonProps, id } = useForm();
+  const [pwdModalOpen, setPwdModalOpen] = useState(false);
+  const [pwdSaving, setPwdSaving]       = useState(false);
+  const [pwdForm]                       = Form.useForm();
+
+  const onSavePassword = async (values: { password: string }) => {
+    if (!id) return;
+    setPwdSaving(true);
+    try {
+      await axiosInstance.patch(`/employees/${id}/password`, { password: values.password });
+      message.success("Contraseña actualizada correctamente");
+      setPwdModalOpen(false);
+      pwdForm.resetFields();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al cambiar la contraseña");
+    } finally {
+      setPwdSaving(false);
+    }
+  };
+
   return (
-    <Edit
-      saveButtonProps={{ ...saveButtonProps, children: "Guardar" }}
-      title="Editar Empleado"
-    >
-      <Form {...formProps} layout="vertical">
-        <EmployeeFormFields isEdit={true} employeeId={id ? Number(id) : undefined} />
-        {id && <ChangePasswordSection employeeId={Number(id)} />}
-        {id && <ShiftAssignmentSection employeeId={Number(id)} />}
-      </Form>
-    </Edit>
+    <>
+      <Edit
+        saveButtonProps={{ ...saveButtonProps, children: "Guardar" }}
+        title="Editar Empleado"
+        headerButtons={({ defaultButtons }) => (
+          <>
+            <Button
+              icon={<LockOutlined />}
+              onClick={() => setPwdModalOpen(true)}
+            >
+              Cambiar contraseña
+            </Button>
+            {defaultButtons}
+          </>
+        )}
+      >
+        <Form {...formProps} layout="vertical">
+          <EmployeeFormFields isEdit={true} employeeId={id ? Number(id) : undefined} />
+          {id && <ShiftAssignmentSection employeeId={Number(id)} />}
+        </Form>
+      </Edit>
+
+      <Modal
+        open={pwdModalOpen}
+        title="Cambiar contraseña del empleado"
+        onCancel={() => { setPwdModalOpen(false); pwdForm.resetFields(); }}
+        onOk={() => pwdForm.submit()}
+        okText="Guardar"
+        confirmLoading={pwdSaving}
+      >
+        <Form form={pwdForm} layout="vertical" onFinish={onSavePassword} style={{ marginTop: 8 }}>
+          <Form.Item
+            label="Nueva contraseña"
+            name="password"
+            rules={[
+              { required: true, message: "Requerido" },
+              { min: 6, message: "Mínimo 6 caracteres" },
+            ]}
+          >
+            <Input.Password placeholder="Mínimo 6 caracteres" />
+          </Form.Item>
+          <Form.Item
+            label="Confirmar contraseña"
+            name="confirm"
+            dependencies={["password"]}
+            rules={[
+              { required: true, message: "Requerido" },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue("password") === value) return Promise.resolve();
+                  return Promise.reject("Las contraseñas no coinciden");
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="Repite la contraseña" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
   );
 };

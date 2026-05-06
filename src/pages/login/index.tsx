@@ -33,9 +33,12 @@ export const LoginPage = () => {
         width: 420,
       }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <Typography.Title level={2} style={{ color: "#1B3A6B", margin: 0 }}>
-            COMTER
-          </Typography.Title>
+          <img
+            src="/comter_logo_full.png"
+            alt="Comter"
+            style={{ height: 64, objectFit: "contain", marginBottom: 12 }}
+          />
+          <br />
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
             Panel de Administración · Control de Calidad y Asistencia
           </Typography.Text>

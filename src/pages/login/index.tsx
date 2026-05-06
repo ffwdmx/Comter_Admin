@@ -36,7 +36,7 @@ export const LoginPage = () => {
           <img
             src="/comter_logo_full.png"
             alt="Comter"
-            style={{ height: 64, objectFit: "contain", marginBottom: 12 }}
+            style={{ width: "70%", maxWidth: 260, objectFit: "contain", marginBottom: 12 }}
           />
           <br />
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>

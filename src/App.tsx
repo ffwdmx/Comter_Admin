@@ -137,8 +137,8 @@ export default function App() {
                           Title={({ collapsed }) => (
                             <div style={{ padding: "12px 8px", textAlign: "center" }}>
                               {collapsed
-                                ? <img src="/comter_logo_short.png" alt="Comter" style={{ height: 32, objectFit: "contain" }} />
-                                : <img src="/comter_logo_full.png"  alt="Comter" style={{ height: 40, objectFit: "contain", maxWidth: "80%" }} />
+                                ? <img src="/comter_logo_short.png" alt="Comter" style={{ height: 52, objectFit: "contain" }} />
+                                : <img src="/comter_logo_short.png" alt="Comter" style={{ height: 64, objectFit: "contain" }} />
                               }
                             </div>
                           )}

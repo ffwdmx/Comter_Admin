@@ -5,7 +5,7 @@ import {
 } from "antd";
 import {
   HistoryOutlined, SwapOutlined, EnvironmentOutlined,
-  CheckCircleFilled, MinusCircleOutlined,
+  CheckCircleFilled, MinusCircleOutlined, LockOutlined,
 } from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import dayjs from "dayjs";
@@ -277,6 +277,89 @@ const AddressSection = ({
               </Form.Item>
             </Col>
           </Row>
+        </Form>
+      </Modal>
+    </>
+  );
+};
+
+// ── Sección Cambiar Contraseña ─────────────────────────────────────────────
+
+const ChangePasswordSection = ({ employeeId }: { employeeId: number }) => {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [passForm]                = Form.useForm();
+
+  const onSave = async (values: { password: string; confirm: string }) => {
+    setSaving(true);
+    try {
+      await axiosInstance.patch(`/employees/${employeeId}/password`, {
+        password: values.password,
+      });
+      message.success("Contraseña actualizada correctamente");
+      setModalOpen(false);
+      passForm.resetFields();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al cambiar la contraseña");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <Divider orientation="left" style={{ marginTop: 24 }}>
+        <Space>
+          <LockOutlined />
+          Acceso al sistema
+        </Space>
+      </Divider>
+
+      <Button
+        icon={<LockOutlined />}
+        onClick={() => setModalOpen(true)}
+        style={{ marginBottom: 16 }}
+      >
+        Cambiar contraseña
+      </Button>
+
+      <Modal
+        open={modalOpen}
+        title="Cambiar contraseña del empleado"
+        onCancel={() => { setModalOpen(false); passForm.resetFields(); }}
+        onOk={() => passForm.submit()}
+        okText="Guardar"
+        confirmLoading={saving}
+      >
+        <Form form={passForm} layout="vertical" onFinish={onSave} style={{ marginTop: 8 }}>
+          <Form.Item
+            label="Nueva contraseña"
+            name="password"
+            rules={[
+              { required: true, message: "Requerido" },
+              { min: 6, message: "Mínimo 6 caracteres" },
+            ]}
+          >
+            <Input.Password placeholder="Mínimo 6 caracteres" />
+          </Form.Item>
+          <Form.Item
+            label="Confirmar contraseña"
+            name="confirm"
+            dependencies={["password"]}
+            rules={[
+              { required: true, message: "Requerido" },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue("password") === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject("Las contraseñas no coinciden");
+                },
+              }),
+            ]}
+          >
+            <Input.Password placeholder="Repite la contraseña" />
+          </Form.Item>
         </Form>
       </Modal>
     </>
@@ -568,6 +651,7 @@ export const EmployeeEdit = () => {
     >
       <Form {...formProps} layout="vertical">
         <EmployeeFormFields isEdit={true} employeeId={id ? Number(id) : undefined} />
+        {id && <ChangePasswordSection employeeId={Number(id)} />}
         {id && <ShiftAssignmentSection employeeId={Number(id)} />}
       </Form>
     </Edit>

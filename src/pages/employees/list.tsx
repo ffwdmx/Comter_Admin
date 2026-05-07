@@ -1,7 +1,8 @@
-import { useTable, EditButton, DeleteButton, CreateButton } from "@refinedev/antd";
-import { Table, Space, Tag, Input, Select } from "antd";
-import { UserOutlined, SearchOutlined } from "@ant-design/icons";
-import { useState } from "react";
+import { EditButton, CreateButton } from "@refinedev/antd";
+import { Table, Space, Tag, Input, Select, Switch, Tooltip } from "antd";
+import { UserOutlined, SearchOutlined, StopOutlined } from "@ant-design/icons";
+import { useState, useEffect } from "react";
+import { axiosInstance } from "../../providers/dataProvider";
 
 const roleColor: Record<string, string> = {
   admin:      "purple",
@@ -15,15 +16,40 @@ const roleLabel: Record<string, string> = {
   employee:   "Empleado",
 };
 
+const reasonLabel: Record<string, string> = {
+  resigned: "Renuncia",
+  fired:    "Despido",
+};
+
 export const EmployeeList = () => {
-  const [search, setSearch]     = useState("");
-  const [roleFilter, setRole]   = useState<string | undefined>();
+  const [search, setSearch]         = useState("");
+  const [roleFilter, setRole]       = useState<string | undefined>();
+  const [showInactive, setInactive] = useState(false);
+  const [data, setData]             = useState<any[]>([]);
+  const [loading, setLoading]       = useState(false);
 
-  const { tableProps } = useTable({
-    syncWithLocation: true,
-  });
+  const fetchEmployees = async (includeInactive: boolean) => {
+    setLoading(true);
+    try {
+      const active   = await axiosInstance.get("/employees", { params: { is_active: true } });
+      const activeList: any[] = Array.isArray(active.data) ? active.data : [];
 
-  const data = (tableProps.dataSource as any[]) ?? [];
+      if (includeInactive) {
+        const inactive = await axiosInstance.get("/employees", { params: { is_active: false } });
+        const inactiveList: any[] = Array.isArray(inactive.data) ? inactive.data : [];
+        setData([...activeList, ...inactiveList]);
+      } else {
+        setData(activeList);
+      }
+    } catch {
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchEmployees(showInactive); }, [showInactive]);
+
   const filtered = data.filter((emp) => {
     const matchSearch =
       !search ||
@@ -37,8 +63,8 @@ export const EmployeeList = () => {
   return (
     <div>
       {/* Toolbar */}
-      <Space style={{ marginBottom: 16, width: "100%", justifyContent: "space-between" }}>
-        <Space>
+      <Space style={{ marginBottom: 16, width: "100%", justifyContent: "space-between" }} wrap>
+        <Space wrap>
           <Input
             placeholder="Buscar nombre, número o email…"
             prefix={<SearchOutlined />}
@@ -58,15 +84,27 @@ export const EmployeeList = () => {
               { label: "Empleado",      value: "employee" },
             ]}
           />
+          <Tooltip title="Mostrar empleados dados de baja">
+            <Space>
+              <Switch
+                checked={showInactive}
+                onChange={setInactive}
+                checkedChildren={<StopOutlined />}
+                size="small"
+              />
+              <span style={{ fontSize: 13, color: "#666" }}>Mostrar bajas</span>
+            </Space>
+          </Tooltip>
         </Space>
         <CreateButton />
       </Space>
 
       <Table
-        {...tableProps}
         dataSource={filtered}
         rowKey="id"
+        loading={loading}
         pagination={{ pageSize: 15 }}
+        rowClassName={(r) => r.is_active ? "" : "row-inactive"}
       >
         <Table.Column
           title="Empleado"
@@ -75,47 +113,54 @@ export const EmployeeList = () => {
             <Space>
               <div style={{
                 width: 36, height: 36, borderRadius: "50%",
-                background: "#1B3A6B22", display: "flex",
-                alignItems: "center", justifyContent: "center",
-                fontWeight: 700, color: "#1B3A6B", fontSize: 14,
+                background: record.is_active ? "#1B3A6B22" : "#88888822",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontWeight: 700, color: record.is_active ? "#1B3A6B" : "#888", fontSize: 14,
               }}>
                 {name?.[0]?.toUpperCase() ?? <UserOutlined />}
               </div>
               <div>
-                <div style={{ fontWeight: 600 }}>{name}</div>
+                <div style={{ fontWeight: 600, color: record.is_active ? undefined : "#aaa" }}>
+                  {name}
+                </div>
                 <div style={{ fontSize: 12, color: "#888" }}>{record.employee_no}</div>
               </div>
             </Space>
           )}
         />
-        <Table.Column title="Email"        dataIndex="email" />
-        <Table.Column title="Teléfono"     dataIndex="phone" render={(v) => v ?? "—"} />
+        <Table.Column title="Email"    dataIndex="email" render={(v) => v ?? "—"} />
+        <Table.Column title="Teléfono" dataIndex="phone" render={(v) => v ?? "—"} />
         <Table.Column
           title="Rol"
           dataIndex="role"
           render={(role) => (
-            <Tag color={roleColor[role] ?? "default"}>
-              {roleLabel[role] ?? role}
-            </Tag>
+            <Tag color={roleColor[role] ?? "default"}>{roleLabel[role] ?? role}</Tag>
           )}
         />
-        <Table.Column title="Planta"       dataIndex="plant_name" render={(v) => v ?? "Sin asignar"} />
+        <Table.Column title="Planta" dataIndex="plant_name" render={(v) => v ?? "Sin asignar"} />
         <Table.Column
           title="Estado"
           dataIndex="is_active"
-          render={(v) => (
-            <Tag color={v ? "green" : "red"}>{v ? "Activo" : "Inactivo"}</Tag>
-          )}
+          render={(v, record: any) => v
+            ? <Tag color="green">Activo</Tag>
+            : (
+              <Space direction="vertical" size={2}>
+                <Tag color="red">Baja</Tag>
+                {record.termination_reason && (
+                  <span style={{ fontSize: 11, color: "#c62828" }}>
+                    {reasonLabel[record.termination_reason] ?? record.termination_reason}
+                    {record.termination_date ? ` · ${record.termination_date}` : ""}
+                  </span>
+                )}
+              </Space>
+            )
+          }
         />
         <Table.Column
           title="Acciones"
           render={(_, record: any) => (
             <Space>
-              <EditButton   hideText size="small" recordItemId={record.id} />
-              <DeleteButton hideText size="small" recordItemId={record.id}
-                confirmTitle="¿Desactivar este empleado?"
-                confirmOkText="Desactivar" confirmCancelText="Cancelar"
-              />
+              <EditButton hideText size="small" recordItemId={record.id} />
             </Space>
           )}
         />

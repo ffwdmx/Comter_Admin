@@ -6,6 +6,7 @@ import {
 import {
   HistoryOutlined, SwapOutlined, EnvironmentOutlined,
   CheckCircleFilled, MinusCircleOutlined, LockOutlined,
+  StopOutlined,
 } from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import dayjs from "dayjs";
@@ -561,9 +562,18 @@ export const EmployeeCreate = () => {
 
 export const EmployeeEdit = () => {
   const { formProps, saveButtonProps, id } = useForm();
+
+  // ── Cambiar contraseña ────────────────────────────────────────────────────
   const [pwdModalOpen, setPwdModalOpen] = useState(false);
   const [pwdSaving, setPwdSaving]       = useState(false);
   const [pwdForm]                       = Form.useForm();
+
+  // ── Dar de baja ───────────────────────────────────────────────────────────
+  const [bajaModalOpen, setBajaModalOpen] = useState(false);
+  const [bajaSaving, setBajaSaving]       = useState(false);
+  const [bajaForm]                        = Form.useForm();
+  const isActive: boolean =
+    (formProps.initialValues as any)?.is_active ?? true;
 
   const onSavePassword = async (values: { password: string }) => {
     if (!id) return;
@@ -580,6 +590,26 @@ export const EmployeeEdit = () => {
     }
   };
 
+  const onTerminate = async (values: { termination_reason: string; termination_date: any }) => {
+    if (!id) return;
+    setBajaSaving(true);
+    try {
+      await axiosInstance.patch(`/employees/${id}/terminate`, {
+        termination_reason: values.termination_reason,
+        termination_date:   values.termination_date.format("YYYY-MM-DD"),
+      });
+      message.success("Empleado dado de baja correctamente");
+      setBajaModalOpen(false);
+      bajaForm.resetFields();
+      // Recargar la página para reflejar el nuevo estado
+      window.location.reload();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al dar de baja al empleado");
+    } finally {
+      setBajaSaving(false);
+    }
+  };
+
   return (
     <>
       <Edit
@@ -587,6 +617,15 @@ export const EmployeeEdit = () => {
         title="Editar Empleado"
         headerButtons={({ defaultButtons }) => (
           <>
+            {isActive && (
+              <Button
+                icon={<StopOutlined />}
+                danger
+                onClick={() => setBajaModalOpen(true)}
+              >
+                Dar de baja
+              </Button>
+            )}
             <Button
               icon={<LockOutlined />}
               onClick={() => setPwdModalOpen(true)}
@@ -603,6 +642,7 @@ export const EmployeeEdit = () => {
         </Form>
       </Edit>
 
+      {/* ── Modal: Cambiar contraseña ─────────────────────────────────────── */}
       <Modal
         open={pwdModalOpen}
         title="Cambiar contraseña del empleado"
@@ -637,6 +677,46 @@ export const EmployeeEdit = () => {
             ]}
           >
             <Input.Password placeholder="Repite la contraseña" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* ── Modal: Dar de baja ───────────────────────────────────────────── */}
+      <Modal
+        open={bajaModalOpen}
+        title="Dar de baja al empleado"
+        onCancel={() => { setBajaModalOpen(false); bajaForm.resetFields(); }}
+        onOk={() => bajaForm.submit()}
+        okText="Confirmar baja"
+        okButtonProps={{ danger: true }}
+        confirmLoading={bajaSaving}
+      >
+        <Form
+          form={bajaForm}
+          layout="vertical"
+          onFinish={onTerminate}
+          style={{ marginTop: 8 }}
+          initialValues={{ termination_date: dayjs() }}
+        >
+          <Form.Item
+            label="Motivo de baja"
+            name="termination_reason"
+            rules={[{ required: true, message: "Selecciona el motivo" }]}
+          >
+            <Select
+              placeholder="Seleccionar motivo"
+              options={[
+                { label: "Renuncia voluntaria", value: "resigned" },
+                { label: "Despido",             value: "fired" },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            label="Fecha de baja"
+            name="termination_date"
+            rules={[{ required: true, message: "Requerida" }]}
+          >
+            <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" />
           </Form.Item>
         </Form>
       </Modal>

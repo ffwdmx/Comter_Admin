@@ -7,6 +7,13 @@ export const LoginPage = () => {
   const { mutate: login, isPending } = useLogin<{ username: string; password: string }>();
   const [error, setError] = useState<string | null>(null);
 
+  // Mensaje de sesión expirada dejado por el interceptor de axios
+  const [sessionMsg] = useState<string | null>(() => {
+    const msg = sessionStorage.getItem("auth_message");
+    if (msg) sessionStorage.removeItem("auth_message");
+    return msg;
+  });
+
   const onFinish = (values: { username: string; password: string }) => {
     setError(null);
     login(values, {
@@ -43,6 +50,15 @@ export const LoginPage = () => {
             Panel de Administración · Control de Calidad y Asistencia
           </Typography.Text>
         </div>
+
+        {sessionMsg && (
+          <Alert
+            message={sessionMsg}
+            type="warning"
+            showIcon
+            style={{ marginBottom: 20 }}
+          />
+        )}
 
         {error && (
           <Alert

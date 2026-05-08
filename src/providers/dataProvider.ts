@@ -12,10 +12,28 @@ axiosInstance.interceptors.request.use((config) => {
   return config;
 });
 
+const SESSION_MSG_KEY = "auth_message";
+
+function forceLogout() {
+  localStorage.clear();
+  sessionStorage.setItem(SESSION_MSG_KEY, "Tu sesión expiró. Por favor inicia sesión de nuevo.");
+  if (window.location.pathname !== "/login") {
+    window.location.href = "/login";
+  }
+}
+
 axiosInstance.interceptors.response.use(
   (res) => res,
   async (error) => {
-    if (error.response?.status === 401) {
+    const status: number | undefined = error.response?.status;
+
+    if (status === 401) {
+      // Evitar loop infinito si el propio refresh falla con 401
+      if ((error.config?.url as string | undefined)?.includes("/auth/refresh")) {
+        forceLogout();
+        return Promise.reject(error);
+      }
+
       const refresh = localStorage.getItem("refresh_token");
       if (refresh) {
         try {
@@ -26,11 +44,17 @@ axiosInstance.interceptors.response.use(
           error.config.headers.Authorization = `Bearer ${data.access_token}`;
           return axiosInstance.request(error.config);
         } catch {
-          localStorage.clear();
-          window.location.href = "/login";
+          forceLogout();
         }
+      } else {
+        forceLogout();
       }
     }
+
+    if (status === 403) {
+      forceLogout();
+    }
+
     return Promise.reject(error);
   }
 );

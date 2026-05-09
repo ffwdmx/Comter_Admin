@@ -324,16 +324,34 @@ const EmployeeFormFields = ({
   });
 
   const form = Form.useFormInstance();
-  const curpValue = Form.useWatch("curp", form);
-  const rfcValue  = Form.useWatch("rfc", form);
+  const curpValue  = Form.useWatch("curp",  form);
+  const rfcValue   = Form.useWatch("rfc",   form);
+  // Detecta cuándo Refine termina de cargar los datos del servidor en edit mode
+  const calleWatch = Form.useWatch("calle", form);
 
   const [addressData, setAddressData] = useState<AddressData>({});
 
+  // Inicializa el domicilio desde los valores que Refine inyecta en el form
+  useEffect(() => {
+    if (isEdit) {
+      setAddressData({
+        calle:         form.getFieldValue("calle")         ?? undefined,
+        num_exterior:  form.getFieldValue("num_exterior")  ?? undefined,
+        num_interior:  form.getFieldValue("num_interior")  ?? undefined,
+        colonia:       form.getFieldValue("colonia")        ?? undefined,
+        municipio:     form.getFieldValue("municipio")     ?? undefined,
+        estado:        form.getFieldValue("estado")        ?? undefined,
+        codigo_postal: form.getFieldValue("codigo_postal") ?? undefined,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calleWatch]);
+
   const onAddressChange = (data: AddressData) => {
     setAddressData(data);
+    form.setFieldsValue(data);       // siempre sincronizar al form
     if (!isEdit) {
-      form.setFieldsValue(data);       // intento directo en el form
-      onAddressChangeProp?.(data);     // respaldo vía ref en el padre
+      onAddressChangeProp?.(data);   // respaldo vía ref en EmployeeCreate
     }
   };
 
@@ -520,18 +538,15 @@ const EmployeeFormFields = ({
         </Col>
       </Row>
 
-      {/* Campos domicilio ocultos para creación (se llenan desde el modal) */}
-      {!isEdit && (
-        <>
-          <Form.Item name="calle"         hidden><Input /></Form.Item>
-          <Form.Item name="num_exterior"  hidden><Input /></Form.Item>
-          <Form.Item name="num_interior"  hidden><Input /></Form.Item>
-          <Form.Item name="colonia"       hidden><Input /></Form.Item>
-          <Form.Item name="municipio"     hidden><Input /></Form.Item>
-          <Form.Item name="estado"        hidden><Input /></Form.Item>
-          <Form.Item name="codigo_postal" hidden><Input /></Form.Item>
-        </>
-      )}
+      {/* Campos de domicilio — ocultos en ambos modos para que el form
+          los incluya siempre en el payload de create/update */}
+      <Form.Item name="calle"         hidden><Input /></Form.Item>
+      <Form.Item name="num_exterior"  hidden><Input /></Form.Item>
+      <Form.Item name="num_interior"  hidden><Input /></Form.Item>
+      <Form.Item name="colonia"       hidden><Input /></Form.Item>
+      <Form.Item name="municipio"     hidden><Input /></Form.Item>
+      <Form.Item name="estado"        hidden><Input /></Form.Item>
+      <Form.Item name="codigo_postal" hidden><Input /></Form.Item>
 
       {/* ── Domicilio ──────────────────────────────────────────────────── */}
       <AddressSection

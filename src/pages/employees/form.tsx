@@ -8,7 +8,7 @@ import {
   CheckCircleFilled, MinusCircleOutlined, LockOutlined,
   StopOutlined,
 } from "@ant-design/icons";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import dayjs from "dayjs";
 import { axiosInstance } from "../../providers/dataProvider";
 
@@ -311,9 +311,11 @@ const roleOptions = [
 const EmployeeFormFields = ({
   isEdit,
   employeeId,
+  onAddressChange: onAddressChangeProp,
 }: {
   isEdit: boolean;
   employeeId?: number;
+  onAddressChange?: (data: AddressData) => void;
 }) => {
   const { selectProps: plantSelectProps } = useSelect({
     resource:    "plants",
@@ -330,7 +332,8 @@ const EmployeeFormFields = ({
   const onAddressChange = (data: AddressData) => {
     setAddressData(data);
     if (!isEdit) {
-      form.setFieldsValue(data);
+      form.setFieldsValue(data);       // intento directo en el form
+      onAddressChangeProp?.(data);     // respaldo vía ref en el padre
     }
   };
 
@@ -544,6 +547,12 @@ const EmployeeFormFields = ({
 
 export const EmployeeCreate = () => {
   const { formProps, saveButtonProps } = useForm();
+
+  // Respaldo para el domicilio: el modal de AddressSection llama a este ref
+  // antes de que Refine recolecte los valores del form, asegurando que
+  // los campos de domicilio siempre lleguen al payload del POST.
+  const addrRef = useRef<AddressData>({});
+
   return (
     <Create
       saveButtonProps={{ ...saveButtonProps, children: "Guardar" }}
@@ -553,8 +562,14 @@ export const EmployeeCreate = () => {
         {...formProps}
         layout="vertical"
         initialValues={{ role: "employee", ...formProps.initialValues }}
+        onFinish={(values) =>
+          formProps.onFinish?.({ ...values, ...addrRef.current })
+        }
       >
-        <EmployeeFormFields isEdit={false} />
+        <EmployeeFormFields
+          isEdit={false}
+          onAddressChange={(data) => { addrRef.current = data; }}
+        />
       </Form>
     </Create>
   );

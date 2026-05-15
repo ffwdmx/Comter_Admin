@@ -34,10 +34,13 @@ interface DayCell {
 }
 
 interface ReviewRow {
-  employee_id: number;
-  employee_no: string;
-  name: string;
-  plant_name: string | null;
+  employee_id:  number;
+  employee_no:  string;
+  name:         string;
+  plant_name:   string | null;
+  shift_name:   string | null;
+  shift_start:  string | null;  // "HH:MM" hora entrada del turno
+  shift_end:    string | null;  // "HH:MM" hora salida del turno
   days: Record<string, DayCell>;
 }
 
@@ -87,9 +90,12 @@ export function WeeklyReview() {
   // Modal: agregar registro
   const [addModal, setAddModal] = useState<{
     open: boolean;
-    employeeId: number;
+    employeeId:   number;
     employeeName: string;
-    date: string;
+    date:         string;
+    shiftStart:   string | null;
+    shiftEnd:     string | null;
+    shiftName:    string | null;
   } | null>(null);
   const [addForm] = Form.useForm();
 
@@ -152,6 +158,17 @@ export function WeeklyReview() {
       );
     } finally {
       setSending(false);
+    }
+  };
+
+  // Pre-llenar hora al seleccionar tipo (entrada→turno inicio, salida→turno fin)
+  const handleAddTypeChange = (type: string) => {
+    if (!addModal) return;
+    const timeStr = type === "check_in" ? addModal.shiftStart : addModal.shiftEnd;
+    if (timeStr) {
+      addForm.setFieldValue("hora", dayjs(timeStr, "HH:mm"));
+    } else {
+      addForm.setFieldValue("hora", null);
     }
   };
 
@@ -303,7 +320,15 @@ export function WeeklyReview() {
             employeeName={row.name}
             date={dateStr}
             onAdd={() =>
-              setAddModal({ open: true, employeeId: row.employee_id, employeeName: row.name, date: dateStr })
+              setAddModal({
+                open: true,
+                employeeId:   row.employee_id,
+                employeeName: row.name,
+                date:         dateStr,
+                shiftStart:   row.shift_start,
+                shiftEnd:     row.shift_end,
+                shiftName:    row.shift_name,
+              })
             }
             onEdit={(id, time, lbl) => {
               setEditModal({ open: true, attendanceId: id, employeeName: row.name, currentTime: time, label: lbl });
@@ -376,7 +401,7 @@ export function WeeklyReview() {
 
       {/* Modal: Agregar registro */}
       <Modal
-        title={`Agregar registro — ${addModal?.employeeName ?? ""} (${addModal?.date ?? ""})`}
+        title={`Agregar registro — ${addModal?.employeeName ?? ""} · ${addModal?.date ?? ""}`}
         open={addModal?.open ?? false}
         onOk={handleAdd}
         onCancel={() => { setAddModal(null); addForm.resetFields(); }}
@@ -384,14 +409,31 @@ export function WeeklyReview() {
         cancelText="Cancelar"
         destroyOnClose
       >
-        <Form form={addForm} layout="vertical" style={{ marginTop: 16 }}>
-          <Form.Item name="type" label="Tipo" rules={[{ required: true }]}>
-            <Select placeholder="Selecciona">
+        {addModal?.shiftName && (
+          <div style={{
+            background: "#f0f5ff", border: "1px solid #adc6ff",
+            borderRadius: 8, padding: "8px 14px", marginBottom: 16,
+          }}>
+            <Text style={{ fontSize: 12 }}>
+              <strong>Turno asignado:</strong> {addModal.shiftName}
+              {addModal.shiftStart && addModal.shiftEnd &&
+                ` · ${addModal.shiftStart} – ${addModal.shiftEnd}`}
+            </Text>
+          </div>
+        )}
+        <Form form={addForm} layout="vertical">
+          <Form.Item name="type" label="Tipo" rules={[{ required: true, message: "Selecciona el tipo" }]}>
+            <Select placeholder="Selecciona" onChange={handleAddTypeChange}>
               <Select.Option value="check_in">Entrada</Select.Option>
               <Select.Option value="check_out">Salida</Select.Option>
             </Select>
           </Form.Item>
-          <Form.Item name="hora" label="Hora (hora México)" rules={[{ required: true }]}>
+          <Form.Item
+            name="hora"
+            label="Hora (hora México)"
+            extra={addModal?.shiftStart ? "Se pre-llenó con el horario del turno — ajusta si es necesario." : undefined}
+            rules={[{ required: true, message: "Ingresa la hora" }]}
+          >
             <TimePicker format="HH:mm" style={{ width: "100%" }} minuteStep={1} />
           </Form.Item>
           <Form.Item name="notes" label="Notas (opcional)">
@@ -464,7 +506,20 @@ function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
   const isPast = date < today;
 
   if (cell.source === "absent") {
-    return <Tag color="error" style={{ margin: 0 }}>FALTA</Tag>;
+    return (
+      <Space direction="vertical" size={4} align="center" style={{ width: "100%" }}>
+        <Tag color="error" style={{ margin: 0 }}>FALTA</Tag>
+        <Button
+          size="small"
+          type="dashed"
+          icon={<PlusOutlined />}
+          onClick={onAdd}
+          style={{ fontSize: 10 }}
+        >
+          Corregir
+        </Button>
+      </Space>
+    );
   }
 
   if (cell.source === "empty") {

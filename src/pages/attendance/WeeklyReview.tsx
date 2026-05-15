@@ -54,16 +54,32 @@ function toMX(iso: string | null): string {
   return dayjs.utc(iso).tz(TZ).format("HH:mm");
 }
 
-function getMondayOf(d: Dayjs): Dayjs {
-  return d.startOf("week").add(1, "day"); // dayjs startOf("week") = domingo
+/**
+ * Devuelve el jueves de inicio del periodo vigente (Jue–Mié).
+ * Si hoy es jueves, devuelve el jueves de la semana PASADA (periodo cerrado).
+ * dayjs.day(): 0=Dom 1=Lun 2=Mar 3=Mié 4=Jue 5=Vie 6=Sáb
+ */
+function getDefaultWeekStart(): Dayjs {
+  const today = dayjs();
+  const THU   = 4;
+  const dow   = today.day();
+  if (dow === THU) {
+    // Hoy es jueves → periodo cerrado empieza el jueves pasado
+    return today.subtract(7, "day").startOf("day");
+  }
+  const daysSinceThu = (dow - THU + 7) % 7;
+  return today.subtract(daysSinceThu, "day").startOf("day");
 }
 
-const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+// Nombres de día en español por índice dayjs (0=Dom…6=Sáb)
+const DAY_NAMES_ES: Record<number, string> = {
+  0: "Dom", 1: "Lun", 2: "Mar", 3: "Mié", 4: "Jue", 5: "Vie", 6: "Sáb",
+};
 
 // ── Componente principal ────────────────────────────────────────────────────
 
 export function WeeklyReview() {
-  const [weekStart, setWeekStart] = useState<Dayjs>(() => getMondayOf(dayjs()));
+  const [weekStart, setWeekStart] = useState<Dayjs>(getDefaultWeekStart);
   const [data, setData]           = useState<WeeklyReviewData | null>(null);
   const [loading, setLoading]     = useState(false);
   const [sending, setSending]     = useState(false);
@@ -266,8 +282,9 @@ export function WeeklyReview() {
     render:    (v: string | null) => <Text style={{ fontSize: 12 }}>{v ?? "—"}</Text>,
   };
 
-  const dayCols = days.map((dateStr, i) => {
-    const label = `${DAY_NAMES[i]}\n${dayjs(dateStr).format("DD/MM")}`;
+  const dayCols = days.map((dateStr) => {
+    const d     = dayjs(dateStr);
+    const label = `${DAY_NAMES_ES[d.day()]}\n${d.format("DD/MM")}`;
     return {
       title: (
         <div style={{ textAlign: "center", whiteSpace: "pre-line", lineHeight: 1.3 }}>
@@ -303,8 +320,7 @@ export function WeeklyReview() {
 
   // ── Render ──────────────────────────────────────────────────────────────
 
-  const currentWeekStart = getMondayOf(dayjs());
-  const isCurrentWeek    = weekStart.isSame(currentWeekStart, "day");
+  const isAtLatestPeriod = !weekStart.isBefore(getDefaultWeekStart(), "day");
 
   return (
     <div style={{ padding: 24 }}>
@@ -340,7 +356,7 @@ export function WeeklyReview() {
         </Text>
         <Button
           icon={<RightOutlined />}
-          disabled={isCurrentWeek}
+          disabled={isAtLatestPeriod}
           onClick={() => setWeekStart(w => w.add(7, "day"))}
         />
       </div>

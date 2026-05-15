@@ -23,14 +23,18 @@ const { Text, Title } = Typography;
 
 // ── Tipos ──────────────────────────────────────────────────────────────────
 
-interface DayCell {
+interface AttendancePair {
   check_in_id:    number | null;
   check_out_id:   number | null;
   check_in_time:  string | null;
   check_out_time: string | null;
+  hours_worked:   number | null;
+  notes:          string | null;
+}
+
+interface DayCell {
   source: "attendance" | "absent" | "empty";
-  hours_worked: number | null;
-  notes: string | null;
+  pairs:  AttendancePair[];
 }
 
 interface ReviewRow {
@@ -502,20 +506,14 @@ interface CellProps {
 }
 
 function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
-  const today = dayjs().format("YYYY-MM-DD");
+  const today  = dayjs().format("YYYY-MM-DD");
   const isPast = date < today;
 
   if (cell.source === "absent") {
     return (
       <Space direction="vertical" size={4} align="center" style={{ width: "100%" }}>
         <Tag color="error" style={{ margin: 0 }}>FALTA</Tag>
-        <Button
-          size="small"
-          type="dashed"
-          icon={<PlusOutlined />}
-          onClick={onAdd}
-          style={{ fontSize: 10 }}
-        >
+        <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={onAdd} style={{ fontSize: 10 }}>
           Corregir
         </Button>
       </Space>
@@ -523,82 +521,108 @@ function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
   }
 
   if (cell.source === "empty") {
-    if (!isPast) {
-      return (
-        <Button
-          size="small"
-          type="dashed"
-          icon={<PlusOutlined />}
-          onClick={onAdd}
-          style={{ fontSize: 11 }}
-        >
-          Agregar
-        </Button>
-      );
-    }
     return (
       <Space direction="vertical" size={2} align="center" style={{ width: "100%" }}>
-        <Tag color="default" style={{ margin: 0, fontSize: 11 }}>Sin registro</Tag>
-        <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={onAdd} style={{ fontSize: 10 }}>
+        {isPast && <Tag color="default" style={{ margin: 0, fontSize: 11 }}>Sin registro</Tag>}
+        <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={onAdd} style={{ fontSize: 11 }}>
           Agregar
         </Button>
       </Space>
     );
   }
 
-  // source === "attendance"
-  const ciTime = cell.check_in_time  ? toMX(cell.check_in_time)  : null;
-  const coTime = cell.check_out_time ? toMX(cell.check_out_time) : null;
-  const hours  = cell.hours_worked   ? `${cell.hours_worked.toFixed(1)}h` : null;
+  // source === "attendance" — uno o varios pares (turno simple / doble turno)
+  const totalHours = cell.pairs.reduce((acc, p) => acc + (p.hours_worked ?? 0), 0);
+
+  return (
+    <Space direction="vertical" size={4} style={{ width: "100%" }}>
+      {cell.pairs.map((pair, idx) => (
+        <PairRow
+          key={`${pair.check_in_id}-${pair.check_out_id}-${idx}`}
+          pair={pair}
+          label={cell.pairs.length > 1 ? `T${idx + 1}` : undefined}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onAdd={onAdd}
+        />
+      ))}
+
+      {/* Total horas si hay más de un par */}
+      {cell.pairs.length > 1 && totalHours > 0 && (
+        <Text type="secondary" style={{ fontSize: 10 }}>
+          Total: {totalHours.toFixed(1)}h
+        </Text>
+      )}
+
+      {/* Botón para agregar un turno adicional */}
+      <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={onAdd}
+        style={{ fontSize: 10, width: "100%" }}>
+        + Turno
+      </Button>
+    </Space>
+  );
+}
+
+// ── Fila de un par entrada/salida ──────────────────────────────────────────
+
+interface PairRowProps {
+  pair:     AttendancePair;
+  label?:   string;          // "T1", "T2" — solo cuando hay doble turno
+  onEdit:   (id: number, time: string, label: string) => void;
+  onDelete: (id: number) => void;
+  onAdd:    () => void;
+}
+
+function PairRow({ pair, label, onEdit, onDelete, onAdd }: PairRowProps) {
+  const ciTime = toMX(pair.check_in_time);
+  const coTime = toMX(pair.check_out_time);
+  const hours  = pair.hours_worked != null ? `${pair.hours_worked.toFixed(1)}h` : null;
 
   return (
     <Space direction="vertical" size={2} style={{ width: "100%" }}>
-      {/* Entrada */}
-      {ciTime && (
-        <Space size={4} align="center">
-          <Tag color="success" style={{ margin: 0, fontSize: 11 }}>{ciTime}</Tag>
-          <Tooltip title="Editar entrada">
-            <Button
-              size="small" type="text" icon={<EditOutlined style={{ fontSize: 11 }} />}
-              onClick={() => onEdit(cell.check_in_id!, cell.check_in_time!, "entrada")}
-              style={{ padding: "0 2px", height: "auto" }}
-            />
-          </Tooltip>
-          <Popconfirm
-            title="¿Eliminar este registro de entrada?"
-            okText="Eliminar" okButtonProps={{ danger: true }}
-            cancelText="Cancelar"
-            onConfirm={() => onDelete(cell.check_in_id!)}
-          >
-            <Button size="small" type="text" danger icon={<DeleteOutlined style={{ fontSize: 11 }} />}
-              style={{ padding: "0 2px", height: "auto" }} />
-          </Popconfirm>
-        </Space>
+      {label && (
+        <Text type="secondary" style={{ fontSize: 9, fontWeight: 600, letterSpacing: 0.5 }}>
+          {label}
+        </Text>
       )}
 
-      {/* Salida */}
-      {coTime ? (
-        <Space size={4} align="center">
-          <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>{coTime}</Tag>
-          <Tooltip title="Editar salida">
-            <Button
-              size="small" type="text" icon={<EditOutlined style={{ fontSize: 11 }} />}
-              onClick={() => onEdit(cell.check_out_id!, cell.check_out_time!, "salida")}
-              style={{ padding: "0 2px", height: "auto" }}
-            />
+      {/* Entrada */}
+      {pair.check_in_id != null ? (
+        <Space size={3} align="center">
+          <Tag color="success" style={{ margin: 0, fontSize: 11 }}>{ciTime}</Tag>
+          <Tooltip title="Editar entrada">
+            <Button size="small" type="text" icon={<EditOutlined style={{ fontSize: 11 }} />}
+              onClick={() => onEdit(pair.check_in_id!, pair.check_in_time!, "entrada")}
+              style={{ padding: "0 2px", height: "auto" }} />
           </Tooltip>
-          <Popconfirm
-            title="¿Eliminar este registro de salida?"
-            okText="Eliminar" okButtonProps={{ danger: true }}
-            cancelText="Cancelar"
-            onConfirm={() => onDelete(cell.check_out_id!)}
-          >
+          <Popconfirm title="¿Eliminar registro de entrada?" okText="Eliminar"
+            okButtonProps={{ danger: true }} cancelText="Cancelar"
+            onConfirm={() => onDelete(pair.check_in_id!)}>
             <Button size="small" type="text" danger icon={<DeleteOutlined style={{ fontSize: 11 }} />}
               style={{ padding: "0 2px", height: "auto" }} />
           </Popconfirm>
         </Space>
-      ) : ciTime ? (
-        <Space size={4} align="center">
+      ) : null}
+
+      {/* Salida */}
+      {pair.check_out_id != null ? (
+        <Space size={3} align="center">
+          <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>{coTime}</Tag>
+          <Tooltip title="Editar salida">
+            <Button size="small" type="text" icon={<EditOutlined style={{ fontSize: 11 }} />}
+              onClick={() => onEdit(pair.check_out_id!, pair.check_out_time!, "salida")}
+              style={{ padding: "0 2px", height: "auto" }} />
+          </Tooltip>
+          <Popconfirm title="¿Eliminar registro de salida?" okText="Eliminar"
+            okButtonProps={{ danger: true }} cancelText="Cancelar"
+            onConfirm={() => onDelete(pair.check_out_id!)}>
+            <Button size="small" type="text" danger icon={<DeleteOutlined style={{ fontSize: 11 }} />}
+              style={{ padding: "0 2px", height: "auto" }} />
+          </Popconfirm>
+        </Space>
+      ) : pair.check_in_id != null ? (
+        // Tiene entrada pero no salida
+        <Space size={3} align="center">
           <Tag color="orange" style={{ margin: 0, fontSize: 10 }}>Sin salida</Tag>
           <Button size="small" type="dashed" icon={<PlusOutlined />}
             onClick={onAdd} style={{ fontSize: 10 }}>
@@ -607,7 +631,7 @@ function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
         </Space>
       ) : null}
 
-      {/* Horas trabajadas */}
+      {/* Horas del par */}
       {hours && (
         <Text type="secondary" style={{ fontSize: 10 }}>{hours}</Text>
       )}

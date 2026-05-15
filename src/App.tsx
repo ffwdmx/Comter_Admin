@@ -10,6 +10,7 @@ import {
   DashboardOutlined,
   ClockCircleOutlined,
   AlertOutlined,
+  CalendarOutlined,
 } from "@ant-design/icons";
 import "@refinedev/antd/dist/reset.css";
 
@@ -25,6 +26,7 @@ import { ClientCreate, ClientEdit } from "./pages/clients/form";
 import { ShiftTypeList }             from "./pages/shifts/list";
 import { ShiftTypeCreate, ShiftTypeEdit } from "./pages/shifts/form";
 import { SupervisorDashboard }       from "./pages/supervisor/dashboard";
+import { WeeklyReview }             from "./pages/attendance/WeeklyReview";
 
 const Dashboard = () => (
   <div style={{ padding: 24 }}>
@@ -86,6 +88,11 @@ export default function App() {
                 list: "/supervisor",
                 meta: { label: "Supervisor", icon: <AlertOutlined /> },
               },
+              {
+                name: "attendance",
+                list: "/attendance",
+                meta: { label: "Asistencia Semanal", icon: <CalendarOutlined /> },
+              },
             ]}
             options={{ syncWithLocation: true, warnWhenUnsavedChanges: true }}
           >
@@ -146,6 +153,7 @@ export default function App() {
                 </Route>
 
                 <Route path="/supervisor" element={<SupervisorDashboard />} />
+                <Route path="/attendance" element={<WeeklyReview />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" />} />

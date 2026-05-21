@@ -11,6 +11,10 @@ import {
   ClockCircleOutlined,
   AlertOutlined,
   CalendarOutlined,
+  ExperimentOutlined,
+  AuditOutlined,
+  BugOutlined,
+  BarChartOutlined,
 } from "@ant-design/icons";
 import "@refinedev/antd/dist/reset.css";
 
@@ -27,6 +31,12 @@ import { ShiftTypeList }             from "./pages/shifts/list";
 import { ShiftTypeCreate, ShiftTypeEdit } from "./pages/shifts/form";
 import { SupervisorDashboard }       from "./pages/supervisor/dashboard";
 import { WeeklyReview }             from "./pages/attendance/WeeklyReview";
+import { QCProjectList }            from "./pages/quality-control/projects/list";
+import { QCProjectCreate, QCProjectEdit } from "./pages/quality-control/projects/form";
+import { QCProjectDetail }          from "./pages/quality-control/projects/detail";
+import { InspectionReview }         from "./pages/quality-control/inspections/review";
+import { DefectTypeList }           from "./pages/quality-control/defect-types/list";
+import { ReportGenerator }          from "./pages/quality-control/reports/generator";
 
 const Dashboard = () => (
   <div style={{ padding: 24 }}>
@@ -93,6 +103,29 @@ export default function App() {
                 list: "/attendance",
                 meta: { label: "Asistencia Semanal", icon: <CalendarOutlined /> },
               },
+              {
+                name: "qc-projects",
+                list:   "/quality-control/projects",
+                create: "/quality-control/projects/create",
+                edit:   "/quality-control/projects/edit/:id",
+                show:   "/quality-control/projects/:id",
+                meta:   { label: "QC — Proyectos", icon: <ExperimentOutlined /> },
+              },
+              {
+                name: "qc-inspections",
+                list: "/quality-control/inspections/review",
+                meta: { label: "QC — Revisión", icon: <AuditOutlined /> },
+              },
+              {
+                name: "qc-defect-types",
+                list: "/quality-control/defect-types",
+                meta: { label: "QC — Defectos", icon: <BugOutlined /> },
+              },
+              {
+                name: "qc-reports",
+                list: "/quality-control/reports",
+                meta: { label: "QC — Reportes", icon: <BarChartOutlined /> },
+              },
             ]}
             options={{ syncWithLocation: true, warnWhenUnsavedChanges: true }}
           >
@@ -154,6 +187,17 @@ export default function App() {
 
                 <Route path="/supervisor" element={<SupervisorDashboard />} />
                 <Route path="/attendance" element={<WeeklyReview />} />
+
+                <Route path="/quality-control/projects">
+                  <Route index              element={<QCProjectList />}   />
+                  <Route path="create"      element={<QCProjectCreate />} />
+                  <Route path="edit/:id"    element={<QCProjectEdit />}   />
+                  <Route path=":id"         element={<QCProjectDetail />} />
+                </Route>
+
+                <Route path="/quality-control/inspections/review" element={<InspectionReview />} />
+                <Route path="/quality-control/defect-types"       element={<DefectTypeList />}   />
+                <Route path="/quality-control/reports"            element={<ReportGenerator />}  />
               </Route>
 
               <Route path="*" element={<Navigate to="/" />} />

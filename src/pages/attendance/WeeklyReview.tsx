@@ -3,11 +3,12 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Table, Tag, Button, Modal, Form, TimePicker, Select,
   Space, Typography, Spin, Tooltip, DatePicker, message,
-  Popconfirm,
+  Popconfirm, Radio, InputNumber, Input, Alert, Badge,
 } from "antd";
 import {
   LeftOutlined, RightOutlined, PlusOutlined,
   EditOutlined, DeleteOutlined, SendOutlined, StopOutlined,
+  MedicineBoxOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -43,8 +44,8 @@ interface ReviewRow {
   name:         string;
   plant_name:   string | null;
   shift_name:   string | null;
-  shift_start:  string | null;  // "HH:MM" hora entrada del turno
-  shift_end:    string | null;  // "HH:MM" hora salida del turno
+  shift_start:  string | null;
+  shift_end:    string | null;
   days: Record<string, DayCell>;
 }
 
@@ -54,6 +55,32 @@ interface WeeklyReviewData {
   rows: ReviewRow[];
 }
 
+interface SpecialEvent {
+  id:                  number;
+  employee_id:         number;
+  employee_name:       string;
+  employee_no:         string;
+  event_type:          "permiso_sin_goce" | "incapacidad";
+  start_date:          string;
+  end_date:            string;
+  partial_hours:       number | null;
+  notes:               string | null;
+  imss_folio:          string | null;
+  registered_by:       number | null;
+  registered_by_name:  string;
+  is_active:           boolean;
+  total_days:          number;
+}
+
+// event info expanded per-day
+interface DaySpecialStatus {
+  event:                SpecialEvent;
+  day_number_in_sequence: number;
+  imss_responsibility:  boolean;
+}
+
+type SpecialEventsMap = Record<number, Record<string, DaySpecialStatus>>;
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function toMX(iso: string | null): string {
@@ -61,27 +88,41 @@ function toMX(iso: string | null): string {
   return dayjs.utc(iso).tz(TZ).format("HH:mm");
 }
 
-/**
- * Devuelve el jueves de inicio del periodo vigente (Jue–Mié).
- * Si hoy es jueves, devuelve el jueves de la semana PASADA (periodo cerrado).
- * dayjs.day(): 0=Dom 1=Lun 2=Mar 3=Mié 4=Jue 5=Vie 6=Sáb
- */
 function getDefaultWeekStart(): Dayjs {
   const today = dayjs();
   const THU   = 4;
   const dow   = today.day();
   if (dow === THU) {
-    // Hoy es jueves → periodo cerrado empieza el jueves pasado
     return today.subtract(7, "day").startOf("day");
   }
   const daysSinceThu = (dow - THU + 7) % 7;
   return today.subtract(daysSinceThu, "day").startOf("day");
 }
 
-// Nombres de día en español por índice dayjs (0=Dom…6=Sáb)
 const DAY_NAMES_ES: Record<number, string> = {
   0: "Dom", 1: "Lun", 2: "Mar", 3: "Mié", 4: "Jue", 5: "Vie", 6: "Sáb",
 };
+
+function buildSpecialEventsMap(events: SpecialEvent[]): SpecialEventsMap {
+  const map: SpecialEventsMap = {};
+  for (const event of events) {
+    if (!map[event.employee_id]) map[event.employee_id] = {};
+    let current = new Date(event.start_date + "T00:00:00");
+    const end   = new Date(event.end_date   + "T00:00:00");
+    let dayNumber = 1;
+    while (current <= end) {
+      const dateStr = current.toISOString().split("T")[0];
+      map[event.employee_id][dateStr] = {
+        event,
+        day_number_in_sequence: dayNumber,
+        imss_responsibility:    event.event_type === "incapacidad" && dayNumber >= 4,
+      };
+      current.setDate(current.getDate() + 1);
+      dayNumber++;
+    }
+  }
+  return map;
+}
 
 // ── Componente principal ────────────────────────────────────────────────────
 
@@ -90,8 +131,9 @@ export function WeeklyReview() {
   const [data, setData]           = useState<WeeklyReviewData | null>(null);
   const [loading, setLoading]     = useState(false);
   const [sending, setSending]     = useState(false);
+  const [specialEventsMap, setSpecialEventsMap] = useState<SpecialEventsMap>({});
 
-  // Modal: agregar registro
+  // Modal: agregar registro de asistencia
   const [addModal, setAddModal] = useState<{
     open: boolean;
     employeeId:   number;
@@ -103,7 +145,7 @@ export function WeeklyReview() {
   } | null>(null);
   const [addForm] = Form.useForm();
 
-  // Modal: editar registro
+  // Modal: editar registro de asistencia
   const [editModal, setEditModal] = useState<{
     open: boolean;
     attendanceId: number;
@@ -121,15 +163,40 @@ export function WeeklyReview() {
   } | null>(null);
   const [bajaForm] = Form.useForm();
 
+  // Modal: registrar permiso/incapacidad
+  const [specialModal, setSpecialModal] = useState(false);
+  const [specialForm] = Form.useForm();
+  const [specialEventType, setSpecialEventType] = useState<"permiso_sin_goce" | "incapacidad">("permiso_sin_goce");
+  const [submittingSpecial, setSubmittingSpecial] = useState(false);
+
+  // Modal: editar/cancelar evento especial existente
+  const [editSpecialModal, setEditSpecialModal] = useState<{
+    open: boolean;
+    event: SpecialEvent;
+    dayStatus: DaySpecialStatus;
+  } | null>(null);
+  const [editSpecialForm] = Form.useForm();
+  const [submittingEditSpecial, setSubmittingEditSpecial] = useState(false);
+
   // ── Carga de datos ──────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axiosInstance.get("/attendance/weekly-review", {
-        params: { week_start: weekStart.format("YYYY-MM-DD") },
-      });
-      setData(res.data);
+      const [reviewRes, specialRes] = await Promise.all([
+        axiosInstance.get("/attendance/weekly-review", {
+          params: { week_start: weekStart.format("YYYY-MM-DD") },
+        }),
+        axiosInstance.get("/attendance/special/", {
+          params: {
+            date_from: weekStart.format("YYYY-MM-DD"),
+            date_to:   weekStart.add(6, "day").format("YYYY-MM-DD"),
+            limit:     500,
+          },
+        }),
+      ]);
+      setData(reviewRes.data);
+      setSpecialEventsMap(buildSpecialEventsMap(specialRes.data));
     } catch {
       message.error("Error al cargar la asistencia semanal.");
     } finally {
@@ -157,15 +224,12 @@ export function WeeklyReview() {
       });
       message.success(res.data.message ?? "Reporte enviado correctamente.");
     } catch (err: any) {
-      message.error(
-        err?.response?.data?.detail ?? "Error al enviar el reporte."
-      );
+      message.error(err?.response?.data?.detail ?? "Error al enviar el reporte.");
     } finally {
       setSending(false);
     }
   };
 
-  // Pre-llenar hora al seleccionar tipo (entrada→turno inicio, salida→turno fin)
   const handleAddTypeChange = (type: string) => {
     if (!addModal) return;
     const timeStr = type === "check_in" ? addModal.shiftStart : addModal.shiftEnd;
@@ -176,7 +240,7 @@ export function WeeklyReview() {
     }
   };
 
-  // ── Agregar registro ────────────────────────────────────────────────────
+  // ── Agregar registro de asistencia ──────────────────────────────────────
 
   const handleAdd = async () => {
     if (!addModal) return;
@@ -200,19 +264,18 @@ export function WeeklyReview() {
       addForm.resetFields();
       fetchData();
     } catch (err: any) {
-      if (err?.errorFields) return; // validación del form
+      if (err?.errorFields) return;
       message.error(err?.response?.data?.detail ?? "Error al agregar registro.");
     }
   };
 
-  // ── Editar registro ─────────────────────────────────────────────────────
+  // ── Editar registro de asistencia ───────────────────────────────────────
 
   const handleEdit = async () => {
     if (!editModal) return;
     try {
       const values = await editForm.validateFields();
       const time: Dayjs = values.hora;
-      // Mantenemos la fecha original del registro, solo cambiamos la hora
       const existingDate = dayjs.utc(editModal.currentTime).tz(TZ).format("YYYY-MM-DD");
       const ts = dayjs.tz(
         `${existingDate} ${time.format("HH:mm")}`,
@@ -234,7 +297,7 @@ export function WeeklyReview() {
     }
   };
 
-  // ── Eliminar registro ───────────────────────────────────────────────────
+  // ── Eliminar registro de asistencia ─────────────────────────────────────
 
   const handleDelete = async (attendanceId: number) => {
     try {
@@ -266,7 +329,76 @@ export function WeeklyReview() {
     }
   };
 
+  // ── Registrar permiso/incapacidad ───────────────────────────────────────
+
+  const handleSpecialSubmit = async () => {
+    setSubmittingSpecial(true);
+    try {
+      const values = await specialForm.validateFields();
+      const [start, end] = values.date_range as [Dayjs, Dayjs];
+      await axiosInstance.post("/attendance/special/", {
+        employee_id:   values.employee_id,
+        event_type:    values.event_type,
+        start_date:    start.format("YYYY-MM-DD"),
+        end_date:      end.format("YYYY-MM-DD"),
+        partial_hours: values.partial_hours ?? null,
+        notes:         values.notes ?? null,
+        imss_folio:    values.imss_folio ?? null,
+      });
+      message.success("Evento registrado correctamente.");
+      setSpecialModal(false);
+      specialForm.resetFields();
+      setSpecialEventType("permiso_sin_goce");
+      fetchData();
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      message.error(err?.response?.data?.detail ?? "Error al registrar el evento.");
+    } finally {
+      setSubmittingSpecial(false);
+    }
+  };
+
+  // ── Actualizar evento especial ──────────────────────────────────────────
+
+  const handleEditSpecialSubmit = async () => {
+    if (!editSpecialModal) return;
+    setSubmittingEditSpecial(true);
+    try {
+      const values = await editSpecialForm.validateFields();
+      const payload: Record<string, any> = {};
+      if (values.end_date)   payload.end_date  = (values.end_date as Dayjs).format("YYYY-MM-DD");
+      if (values.notes)      payload.notes     = values.notes;
+      if (values.imss_folio) payload.imss_folio = values.imss_folio;
+      await axiosInstance.patch(
+        `/attendance/special/${editSpecialModal.event.id}`,
+        payload,
+      );
+      message.success("Evento actualizado.");
+      setEditSpecialModal(null);
+      editSpecialForm.resetFields();
+      fetchData();
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      message.error(err?.response?.data?.detail ?? "Error al actualizar el evento.");
+    } finally {
+      setSubmittingEditSpecial(false);
+    }
+  };
+
+  const handleCancelSpecial = async (eventId: number) => {
+    try {
+      await axiosInstance.delete(`/attendance/special/${eventId}`);
+      message.success("Evento cancelado.");
+      setEditSpecialModal(null);
+      fetchData();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al cancelar el evento.");
+    }
+  };
+
   // ── Columnas de la tabla ────────────────────────────────────────────────
+
+  const allEmployees = data?.rows ?? [];
 
   const employeeCol = {
     title:     "Empleado",
@@ -315,7 +447,22 @@ export function WeeklyReview() {
       key:   dateStr,
       width: 148,
       render: (_: unknown, row: ReviewRow) => {
-        const cell = row.days[dateStr];
+        const cell    = row.days[dateStr];
+        const special = specialEventsMap[row.employee_id]?.[dateStr];
+
+        if (special) {
+          return (
+            <SpecialEventCell
+              status={special}
+              onEdit={() => setEditSpecialModal({
+                open: true,
+                event: special.event,
+                dayStatus: special,
+              })}
+            />
+          );
+        }
+
         if (!cell) return null;
         return (
           <CellRenderer
@@ -356,22 +503,30 @@ export function WeeklyReview() {
       {/* Encabezado */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <Title level={4} style={{ margin: 0 }}>Revisión de Asistencia Semanal</Title>
-        <Button
-          type="primary"
-          icon={<SendOutlined />}
-          loading={sending}
-          onClick={() =>
-            Modal.confirm({
-              title:   "¿Enviar reporte al contador?",
-              content: `Se enviará el reporte de la semana ${weekStart.format("DD/MM")} – ${weekStart.add(6, "day").format("DD/MM/YYYY")} por correo electrónico.`,
-              okText:  "Enviar",
-              cancelText: "Cancelar",
-              onOk:    handleSendReport,
-            })
-          }
-        >
-          Enviar Reporte por Email
-        </Button>
+        <Space>
+          <Button
+            icon={<MedicineBoxOutlined />}
+            onClick={() => setSpecialModal(true)}
+          >
+            + Permiso / Incapacidad
+          </Button>
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            loading={sending}
+            onClick={() =>
+              Modal.confirm({
+                title:   "¿Enviar reporte al contador?",
+                content: `Se enviará el reporte de la semana ${weekStart.format("DD/MM")} – ${weekStart.add(6, "day").format("DD/MM/YYYY")} por correo electrónico.`,
+                okText:  "Enviar",
+                cancelText: "Cancelar",
+                onOk:    handleSendReport,
+              })
+            }
+          >
+            Enviar Reporte por Email
+          </Button>
+        </Space>
       </div>
 
       {/* Navegación de semana */}
@@ -403,7 +558,17 @@ export function WeeklyReview() {
         />
       </Spin>
 
-      {/* Modal: Agregar registro */}
+      {/* Leyenda de colores */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12, fontSize: 12, color: "#555" }}>
+        <span><Badge color="green"  /> Entrada registrada</span>
+        <span><Badge color="gold"   /> Salida registrada</span>
+        <span><Badge color="red"    /> Falta</span>
+        <span><Badge color="blue"   /> Permiso sin goce</span>
+        <span><Badge color="orange" /> Incapacidad (días 1-3, patrón)</span>
+        <span><Badge color="purple" /> Incapacidad (día 4+, IMSS)</span>
+      </div>
+
+      {/* ── Modal: Agregar registro de asistencia ───────────────────────── */}
       <Modal
         title={`Agregar registro — ${addModal?.employeeName ?? ""} · ${addModal?.date ?? ""}`}
         open={addModal?.open ?? false}
@@ -446,7 +611,7 @@ export function WeeklyReview() {
         </Form>
       </Modal>
 
-      {/* Modal: Editar registro */}
+      {/* ── Modal: Editar registro de asistencia ────────────────────────── */}
       <Modal
         title={`Editar ${editModal?.label ?? ""} — ${editModal?.employeeName ?? ""}`}
         open={editModal?.open ?? false}
@@ -466,7 +631,7 @@ export function WeeklyReview() {
         </Form>
       </Modal>
 
-      {/* Modal: Dar de baja */}
+      {/* ── Modal: Dar de baja ───────────────────────────────────────────── */}
       <Modal
         title={`Dar de baja — ${bajaModal?.employeeName ?? ""}`}
         open={bajaModal?.open ?? false}
@@ -489,11 +654,258 @@ export function WeeklyReview() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* ── Modal: Registrar permiso/incapacidad ─────────────────────────── */}
+      <Modal
+        title="Registrar Permiso o Incapacidad"
+        open={specialModal}
+        onCancel={() => {
+          setSpecialModal(false);
+          specialForm.resetFields();
+          setSpecialEventType("permiso_sin_goce");
+        }}
+        footer={null}
+        destroyOnClose
+        width={540}
+      >
+        <Form form={specialForm} layout="vertical" style={{ marginTop: 8 }}>
+          <Form.Item name="employee_id" label="Empleado" rules={[{ required: true, message: "Selecciona el empleado" }]}>
+            <Select
+              showSearch
+              placeholder="Buscar empleado..."
+              filterOption={(input, opt) =>
+                (opt?.label as string ?? "").toLowerCase().includes(input.toLowerCase())
+              }
+              options={allEmployees.map(e => ({
+                value: e.employee_id,
+                label: `${e.employee_no} — ${e.name}`,
+              }))}
+            />
+          </Form.Item>
+
+          <Form.Item name="event_type" label="Tipo" rules={[{ required: true }]} initialValue="permiso_sin_goce">
+            <Radio.Group
+              onChange={e => {
+                setSpecialEventType(e.target.value);
+                specialForm.setFieldValue("partial_hours", null);
+              }}
+            >
+              <Radio.Button value="permiso_sin_goce">Permiso sin goce de sueldo</Radio.Button>
+              <Radio.Button value="incapacidad">Incapacidad (IMSS)</Radio.Button>
+            </Radio.Group>
+          </Form.Item>
+
+          <Form.Item name="date_range" label="Período" rules={[{ required: true, message: "Selecciona el período" }]}>
+            <DatePicker.RangePicker
+              format="DD/MM/YYYY"
+              style={{ width: "100%" }}
+              disabledDate={d => !!d && d > dayjs().add(15, "day")}
+            />
+          </Form.Item>
+
+          {specialEventType === "permiso_sin_goce" && (
+            <Form.Item
+              name="partial_hours"
+              label="¿Permiso de horas? (dejar en blanco si es día completo)"
+            >
+              <InputNumber min={0.5} max={12} step={0.5} placeholder="Ej: 4.0" style={{ width: "100%" }} />
+            </Form.Item>
+          )}
+
+          {specialEventType === "incapacidad" && (
+            <>
+              <Form.Item name="imss_folio" label="Folio IMSS (opcional)">
+                <Input placeholder="Número de folio del certificado de incapacidad" />
+              </Form.Item>
+              <Alert
+                type="info"
+                showIcon
+                message="Regla de incapacidad"
+                description={
+                  <span>
+                    <b>Días 1 al 3:</b> Sin goce de sueldo (responsabilidad del patrón).<br />
+                    <b>Día 4 en adelante:</b> El IMSS cubre el 60% del salario diario integrado.
+                    En el reporte al contador se reporta como <b>INCAPACIDAD</b>.
+                  </span>
+                }
+                style={{ marginBottom: 16 }}
+              />
+            </>
+          )}
+
+          <Form.Item name="notes" label="Notas / Motivo (opcional)">
+            <Input.TextArea
+              rows={2}
+              placeholder={
+                specialEventType === "incapacidad"
+                  ? "Diagnóstico o motivo de la incapacidad (opcional)"
+                  : "Motivo del permiso (opcional)"
+              }
+            />
+          </Form.Item>
+        </Form>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+          <Button onClick={() => {
+            setSpecialModal(false);
+            specialForm.resetFields();
+            setSpecialEventType("permiso_sin_goce");
+          }}>
+            Cancelar
+          </Button>
+          <Button type="primary" loading={submittingSpecial} onClick={handleSpecialSubmit}>
+            Registrar
+          </Button>
+        </div>
+      </Modal>
+
+      {/* ── Modal: Editar / cancelar evento especial existente ───────────── */}
+      {editSpecialModal && (
+        <Modal
+          title={
+            editSpecialModal.event.event_type === "incapacidad"
+              ? `Incapacidad — ${editSpecialModal.event.employee_name}`
+              : `Permiso sin goce — ${editSpecialModal.event.employee_name}`
+          }
+          open={editSpecialModal.open}
+          onCancel={() => { setEditSpecialModal(null); editSpecialForm.resetFields(); }}
+          footer={null}
+          destroyOnClose
+          width={480}
+        >
+          <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
+            <Text>
+              <strong>Período:</strong>{" "}
+              {dayjs(editSpecialModal.event.start_date).format("DD/MM/YYYY")} —{" "}
+              {dayjs(editSpecialModal.event.end_date).format("DD/MM/YYYY")}
+              {" "}({editSpecialModal.event.total_days} día{editSpecialModal.event.total_days !== 1 ? "s" : ""})
+            </Text>
+            {editSpecialModal.event.event_type === "incapacidad" && (
+              <Text>
+                <strong>Hoy es el día:</strong> {editSpecialModal.dayStatus.day_number_in_sequence}
+                {" — "}
+                {editSpecialModal.dayStatus.imss_responsibility
+                  ? <Tag color="purple">Responsabilidad IMSS</Tag>
+                  : <Tag color="orange">Responsabilidad patrón</Tag>
+                }
+              </Text>
+            )}
+            {editSpecialModal.event.imss_folio && (
+              <Text><strong>Folio IMSS:</strong> {editSpecialModal.event.imss_folio}</Text>
+            )}
+            {editSpecialModal.event.notes && (
+              <Text><strong>Notas:</strong> {editSpecialModal.event.notes}</Text>
+            )}
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              Registrado por: {editSpecialModal.event.registered_by_name}
+            </Text>
+          </Space>
+
+          <Form form={editSpecialForm} layout="vertical">
+            {editSpecialModal.event.event_type === "incapacidad" && (
+              <Form.Item name="end_date" label="Cerrar incapacidad en (nueva fecha fin)">
+                <DatePicker
+                  format="DD/MM/YYYY"
+                  style={{ width: "100%" }}
+                  disabledDate={d =>
+                    !!d && d < dayjs(editSpecialModal.event.start_date)
+                  }
+                  placeholder="Dejar vacío para mantener fecha actual"
+                />
+              </Form.Item>
+            )}
+            {editSpecialModal.event.event_type === "incapacidad" && (
+              <Form.Item name="imss_folio" label="Actualizar folio IMSS">
+                <Input placeholder={editSpecialModal.event.imss_folio ?? "Número de folio"} />
+              </Form.Item>
+            )}
+            <Form.Item name="notes" label="Actualizar notas">
+              <Input.TextArea rows={2} placeholder={editSpecialModal.event.notes ?? "Notas"} />
+            </Form.Item>
+          </Form>
+
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+            <Popconfirm
+              title="¿Cancelar este evento?"
+              description="El evento se marcará como inactivo. Esta acción no se puede deshacer."
+              okText="Sí, cancelar"
+              okButtonProps={{ danger: true }}
+              cancelText="No"
+              onConfirm={() => handleCancelSpecial(editSpecialModal.event.id)}
+            >
+              <Button danger>Cancelar evento</Button>
+            </Popconfirm>
+            <Space>
+              <Button onClick={() => { setEditSpecialModal(null); editSpecialForm.resetFields(); }}>
+                Cerrar
+              </Button>
+              <Button
+                type="primary"
+                loading={submittingEditSpecial}
+                onClick={handleEditSpecialSubmit}
+              >
+                Guardar cambios
+              </Button>
+            </Space>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
-// ── Celda de día ────────────────────────────────────────────────────────────
+// ── Celda con evento especial ───────────────────────────────────────────────
+
+interface SpecialEventCellProps {
+  status: DaySpecialStatus;
+  onEdit: () => void;
+}
+
+function SpecialEventCell({ status, onEdit }: SpecialEventCellProps) {
+  const { event, day_number_in_sequence, imss_responsibility } = status;
+
+  if (event.event_type === "permiso_sin_goce") {
+    return (
+      <Space direction="vertical" size={2} align="center" style={{ width: "100%" }}>
+        <Tag color="blue" style={{ fontWeight: 600 }}>
+          {event.partial_hours ? `PERMISO ${event.partial_hours}h` : "PERMISO"}
+        </Tag>
+        <Tooltip title="Ver / editar evento">
+          <Button
+            size="small" type="text"
+            icon={<EditOutlined style={{ fontSize: 11 }} />}
+            onClick={onEdit}
+            style={{ padding: "0 2px", height: "auto" }}
+          />
+        </Tooltip>
+      </Space>
+    );
+  }
+
+  // incapacidad
+  return (
+    <Space direction="vertical" size={2} align="center" style={{ width: "100%" }}>
+      {imss_responsibility ? (
+        <Tag color="purple" style={{ fontWeight: 600, fontSize: 10 }}>
+          INCAP · Día {day_number_in_sequence} · IMSS
+        </Tag>
+      ) : (
+        <Tag color="orange" style={{ fontWeight: 600, fontSize: 10 }}>
+          INCAP · Día {day_number_in_sequence} · Patrón
+        </Tag>
+      )}
+      <Tooltip title="Ver / editar evento">
+        <Button
+          size="small" type="text"
+          icon={<EditOutlined style={{ fontSize: 11 }} />}
+          onClick={onEdit}
+          style={{ padding: "0 2px", height: "auto" }}
+        />
+      </Tooltip>
+    </Space>
+  );
+}
+
+// ── Celda de día (asistencia normal) ───────────────────────────────────────
 
 interface CellProps {
   cell:         DayCell;
@@ -531,7 +943,6 @@ function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
     );
   }
 
-  // source === "attendance" — uno o varios pares (turno simple / doble turno)
   const totalHours = cell.pairs.reduce((acc, p) => acc + (p.hours_worked ?? 0), 0);
 
   return (
@@ -547,14 +958,12 @@ function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
         />
       ))}
 
-      {/* Total horas si hay más de un par */}
       {cell.pairs.length > 1 && totalHours > 0 && (
         <Text type="secondary" style={{ fontSize: 10 }}>
           Total: {totalHours.toFixed(1)}h
         </Text>
       )}
 
-      {/* Botón para agregar un turno adicional */}
       <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={onAdd}
         style={{ fontSize: 10, width: "100%" }}>
         + Turno
@@ -567,7 +976,7 @@ function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
 
 interface PairRowProps {
   pair:     AttendancePair;
-  label?:   string;          // "T1", "T2" — solo cuando hay doble turno
+  label?:   string;
   onEdit:   (id: number, time: string, label: string) => void;
   onDelete: (id: number) => void;
   onAdd:    () => void;
@@ -586,7 +995,6 @@ function PairRow({ pair, label, onEdit, onDelete, onAdd }: PairRowProps) {
         </Text>
       )}
 
-      {/* Entrada */}
       {pair.check_in_id != null ? (
         <Space size={3} align="center">
           <Tag color="success" style={{ margin: 0, fontSize: 11 }}>{ciTime}</Tag>
@@ -604,7 +1012,6 @@ function PairRow({ pair, label, onEdit, onDelete, onAdd }: PairRowProps) {
         </Space>
       ) : null}
 
-      {/* Salida */}
       {pair.check_out_id != null ? (
         <Space size={3} align="center">
           <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>{coTime}</Tag>
@@ -621,7 +1028,6 @@ function PairRow({ pair, label, onEdit, onDelete, onAdd }: PairRowProps) {
           </Popconfirm>
         </Space>
       ) : pair.check_in_id != null ? (
-        // Tiene entrada pero no salida
         <Space size={3} align="center">
           <Tag color="orange" style={{ margin: 0, fontSize: 10 }}>Sin salida</Tag>
           <Button size="small" type="dashed" icon={<PlusOutlined />}
@@ -631,7 +1037,6 @@ function PairRow({ pair, label, onEdit, onDelete, onAdd }: PairRowProps) {
         </Space>
       ) : null}
 
-      {/* Horas del par */}
       {hours && (
         <Text type="secondary" style={{ fontSize: 10 }}>{hours}</Text>
       )}

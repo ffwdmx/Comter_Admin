@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Table, Tag, Button, Modal, Form, TimePicker, Select,
   Space, Typography, Spin, Tooltip, DatePicker, message,
-  Popconfirm, Radio, InputNumber, Input, Alert, Badge,
+  Popconfirm, Radio, InputNumber, Input, Badge,
 } from "antd";
 import {
   LeftOutlined, RightOutlined, PlusOutlined,
@@ -698,6 +698,7 @@ export function WeeklyReview() {
           <Form.Item name="date_range" label="Período" rules={[{ required: true, message: "Selecciona el período" }]}>
             <DatePicker.RangePicker
               format="DD/MM/YYYY"
+              placeholder={["Fecha de inicio", "Fecha final"]}
               style={{ width: "100%" }}
               disabledDate={d => !!d && d > dayjs().add(15, "day")}
             />
@@ -713,24 +714,9 @@ export function WeeklyReview() {
           )}
 
           {specialEventType === "incapacidad" && (
-            <>
-              <Form.Item name="imss_folio" label="Folio IMSS (opcional)">
-                <Input placeholder="Número de folio del certificado de incapacidad" />
-              </Form.Item>
-              <Alert
-                type="info"
-                showIcon
-                message="Regla de incapacidad"
-                description={
-                  <span>
-                    <b>Días 1 al 3:</b> Sin goce de sueldo (responsabilidad del patrón).<br />
-                    <b>Día 4 en adelante:</b> El IMSS cubre el 60% del salario diario integrado.
-                    En el reporte al contador se reporta como <b>INCAPACIDAD</b>.
-                  </span>
-                }
-                style={{ marginBottom: 16 }}
-              />
-            </>
+            <Form.Item name="imss_folio" label="Folio IMSS (opcional)">
+              <Input placeholder="Número de folio del certificado de incapacidad" />
+            </Form.Item>
           )}
 
           <Form.Item name="notes" label="Notas / Motivo (opcional)">

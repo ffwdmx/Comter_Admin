@@ -92,9 +92,6 @@ function getDefaultWeekStart(): Dayjs {
   const today = dayjs();
   const THU   = 4;
   const dow   = today.day();
-  if (dow === THU) {
-    return today.subtract(7, "day").startOf("day");
-  }
   const daysSinceThu = (dow - THU + 7) % 7;
   return today.subtract(daysSinceThu, "day").startOf("day");
 }

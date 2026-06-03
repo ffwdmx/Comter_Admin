@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   Table, Button, Tag, Space, Modal, Input, Typography,
-  Badge, Tooltip, message as antMessage,
+  Badge, message as antMessage,
 } from "antd";
 import {
   CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined,
@@ -83,7 +83,28 @@ export function PendingRequests() {
     }
   };
 
+  const getRequestKind = (r: PendingRequest): { label: string; color: string } => {
+    if (r.supervisor_id !== null) return { label: "Solicitud supervisor", color: "blue" };
+    return { label: "Incidencia de turno", color: "orange" };
+  };
+
+  const getViolationNote = (notes: string | null): string | null => {
+    if (!notes) return null;
+    const lines = notes.split("\n").map((l) => l.trim()).filter(Boolean);
+    const last = lines[lines.length - 1];
+    return last?.startsWith("Llegada") || last?.startsWith("Salida anticipada")
+      ? last
+      : null;
+  };
+
   const columns = [
+    {
+      title: "Tipo de solicitud",
+      render: (_: unknown, r: PendingRequest) => {
+        const kind = getRequestKind(r);
+        return <Tag color={kind.color}>{kind.label}</Tag>;
+      },
+    },
     {
       title: "Empleado",
       render: (_: unknown, r: PendingRequest) => (
@@ -96,12 +117,19 @@ export function PendingRequests() {
       ),
     },
     {
-      title: "Supervisor",
-      dataIndex: "supervisor_name",
-      render: (v: string | null) => v ?? "—",
+      title: "Registrado por",
+      render: (_: unknown, r: PendingRequest) => {
+        if (r.supervisor_name) return r.supervisor_name;
+        const violation = getViolationNote(r.notes);
+        return (
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {violation ?? "Autoregistro"}
+          </Typography.Text>
+        );
+      },
     },
     {
-      title: "Tipo",
+      title: "Movimiento",
       dataIndex: "type",
       render: (t: string) =>
         t === "check_in" ? (
@@ -121,20 +149,6 @@ export function PendingRequests() {
       dataIndex: "created_at",
       render: (ts: string) =>
         dayjs.utc(ts).tz(TZ).format("DD/MM HH:mm"),
-    },
-    {
-      title: "Notas",
-      dataIndex: "notes",
-      render: (v: string | null) =>
-        v ? (
-          <Tooltip title={v}>
-            <Typography.Text ellipsis style={{ maxWidth: 180 }}>
-              {v}
-            </Typography.Text>
-          </Tooltip>
-        ) : (
-          <Typography.Text type="secondary">—</Typography.Text>
-        ),
     },
     {
       title: "Acciones",

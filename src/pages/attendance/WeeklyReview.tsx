@@ -139,6 +139,7 @@ export function WeeklyReview() {
     shiftStart:   string | null;
     shiftEnd:     string | null;
     shiftName:    string | null;
+    forceType:    "check_out" | null;
   } | null>(null);
   const [addForm] = Form.useForm();
 
@@ -313,8 +314,8 @@ export function WeeklyReview() {
     try {
       const values = await bajaForm.validateFields();
       await axiosInstance.patch(`/employees/${bajaModal.employeeId}/terminate`, {
-        reason: values.reason,
-        date:   values.date.format("YYYY-MM-DD"),
+        termination_reason: values.reason,
+        termination_date:   values.date.format("YYYY-MM-DD"),
       });
       message.success(`${bajaModal.employeeName} dado de baja.`);
       setBajaModal(null);
@@ -467,7 +468,7 @@ export function WeeklyReview() {
             employeeId={row.employee_id}
             employeeName={row.name}
             date={dateStr}
-            onAdd={() =>
+            onAdd={() => {
               setAddModal({
                 open: true,
                 employeeId:   row.employee_id,
@@ -476,8 +477,23 @@ export function WeeklyReview() {
                 shiftStart:   row.shift_start,
                 shiftEnd:     row.shift_end,
                 shiftName:    row.shift_name,
-              })
-            }
+                forceType:    null,
+              });
+              addForm.setFieldsValue({ type: undefined, hora: row.shift_start ? dayjs(row.shift_start, "HH:mm") : undefined });
+            }}
+            onAddSalida={() => {
+              setAddModal({
+                open: true,
+                employeeId:   row.employee_id,
+                employeeName: row.name,
+                date:         dateStr,
+                shiftStart:   row.shift_start,
+                shiftEnd:     row.shift_end,
+                shiftName:    row.shift_name,
+                forceType:    "check_out",
+              });
+              addForm.setFieldsValue({ type: "check_out", hora: row.shift_end ? dayjs(row.shift_end, "HH:mm") : undefined });
+            }}
             onEdit={(id, time, lbl) => {
               setEditModal({ open: true, attendanceId: id, employeeName: row.name, currentTime: time, label: lbl });
               editForm.setFieldsValue({ hora: dayjs.utc(time).tz(TZ) });
@@ -588,16 +604,23 @@ export function WeeklyReview() {
           </div>
         )}
         <Form form={addForm} layout="vertical">
-          <Form.Item name="type" label="Tipo" rules={[{ required: true, message: "Selecciona el tipo" }]}>
-            <Select placeholder="Selecciona" onChange={handleAddTypeChange}>
-              <Select.Option value="check_in">Entrada</Select.Option>
-              <Select.Option value="check_out">Salida</Select.Option>
-            </Select>
-          </Form.Item>
+          {addModal?.forceType === "check_out" ? (
+            <Form.Item label="Tipo">
+              <Tag color="orange" style={{ fontSize: 13, padding: "2px 10px" }}>Salida</Tag>
+              <Form.Item name="type" hidden><input /></Form.Item>
+            </Form.Item>
+          ) : (
+            <Form.Item name="type" label="Tipo" rules={[{ required: true, message: "Selecciona el tipo" }]}>
+              <Select placeholder="Selecciona" onChange={handleAddTypeChange}>
+                <Select.Option value="check_in">Entrada</Select.Option>
+                <Select.Option value="check_out">Salida</Select.Option>
+              </Select>
+            </Form.Item>
+          )}
           <Form.Item
             name="hora"
             label="Hora (hora México)"
-            extra={addModal?.shiftStart ? "Se pre-llenó con el horario del turno — ajusta si es necesario." : undefined}
+            extra="Se pre-llenó con el horario del turno — ajusta si es necesario."
             rules={[{ required: true, message: "Ingresa la hora" }]}
           >
             <TimePicker format="HH:mm" style={{ width: "100%" }} minuteStep={1} />
@@ -896,11 +919,12 @@ interface CellProps {
   employeeName: string;
   date:         string;
   onAdd:        () => void;
+  onAddSalida:  () => void;
   onEdit:       (id: number, time: string, label: string) => void;
   onDelete:     (id: number) => void;
 }
 
-function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
+function CellRenderer({ cell, date, onAdd, onAddSalida, onEdit, onDelete }: CellProps) {
   const today  = dayjs().format("YYYY-MM-DD");
   const isPast = date < today;
 
@@ -937,7 +961,7 @@ function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
           label={cell.pairs.length > 1 ? `T${idx + 1}` : undefined}
           onEdit={onEdit}
           onDelete={onDelete}
-          onAdd={onAdd}
+          onAddSalida={onAddSalida}
         />
       ))}
 
@@ -958,14 +982,14 @@ function CellRenderer({ cell, date, onAdd, onEdit, onDelete }: CellProps) {
 // ── Fila de un par entrada/salida ──────────────────────────────────────────
 
 interface PairRowProps {
-  pair:     AttendancePair;
-  label?:   string;
-  onEdit:   (id: number, time: string, label: string) => void;
-  onDelete: (id: number) => void;
-  onAdd:    () => void;
+  pair:        AttendancePair;
+  label?:      string;
+  onEdit:      (id: number, time: string, label: string) => void;
+  onDelete:    (id: number) => void;
+  onAddSalida: () => void;
 }
 
-function PairRow({ pair, label, onEdit, onDelete, onAdd }: PairRowProps) {
+function PairRow({ pair, label, onEdit, onDelete, onAddSalida }: PairRowProps) {
   const ciTime = toMX(pair.check_in_time);
   const coTime = toMX(pair.check_out_time);
   const hours  = pair.hours_worked != null ? `${pair.hours_worked.toFixed(1)}h` : null;
@@ -1014,7 +1038,7 @@ function PairRow({ pair, label, onEdit, onDelete, onAdd }: PairRowProps) {
         <Space size={3} align="center">
           <Tag color="orange" style={{ margin: 0, fontSize: 10 }}>Sin salida</Tag>
           <Button size="small" type="dashed" icon={<PlusOutlined />}
-            onClick={onAdd} style={{ fontSize: 10 }}>
+            onClick={onAddSalida} style={{ fontSize: 10 }}>
             + Salida
           </Button>
         </Space>

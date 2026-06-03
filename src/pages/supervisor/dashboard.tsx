@@ -2,14 +2,23 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Card, Col, Row, Typography, Tag, Button, Space, Badge,
   Table, Modal, message, Divider, Empty, Spin, Statistic,
-  Alert,
+  Alert, Input,
 } from "antd";
 import {
   ClockCircleOutlined, UserOutlined, ExclamationCircleOutlined,
   CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined,
   DollarOutlined, MinusCircleOutlined, WarningOutlined,
+  HourglassOutlined, SwapOutlined,
 } from "@ant-design/icons";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import { axiosInstance } from "../../providers/dataProvider";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const TZ = "America/Mexico_City";
 
 const { Title, Text } = Typography;
 
@@ -46,6 +55,28 @@ interface AbsenceAlert {
   absence_record_id: number;
 }
 
+interface AttendancePending {
+  id:              number;
+  employee_id:     number;
+  employee_name:   string | null;
+  employee_no:     string | null;
+  supervisor_id:   number | null;
+  supervisor_name: string | null;
+  type:            "check_in" | "check_out";
+  timestamp:       string;
+  notes:           string | null;
+  created_at:      string;
+}
+
+interface ExtraShiftReq {
+  id:            number;
+  employee_id:   number;
+  employee_name: string | null;
+  employee_no:   string | null;
+  date:          string;
+  created_at:    string;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 const fmtTime = (iso: string) =>
@@ -57,6 +88,200 @@ const fmtDate = (iso: string) =>
 const minutesUntilExpiry = (expiresAt: string) => {
   const diff = new Date(expiresAt).getTime() - Date.now();
   return Math.max(0, Math.floor(diff / 60000));
+};
+
+// ── Sección: Solicitudes de Asistencia Pendientes ─────────────────────────
+
+const AttendancePendingSection = ({
+  items, loading, onApprove, onReject,
+}: {
+  items: AttendancePending[];
+  loading: boolean;
+  onApprove: (id: number) => void;
+  onReject: (id: number) => void;
+}) => {
+  const getKind = (r: AttendancePending) =>
+    r.supervisor_id !== null
+      ? { label: "Solicitud supervisor", color: "blue" }
+      : { label: "Incidencia de turno",  color: "orange" };
+
+  const getViolation = (notes: string | null) => {
+    if (!notes) return null;
+    const lines = notes.split("\n").map((l) => l.trim()).filter(Boolean);
+    const last = lines[lines.length - 1];
+    return last?.startsWith("Llegada") || last?.startsWith("Salida anticipada") ? last : null;
+  };
+
+  const columns = [
+    {
+      title: "Tipo",
+      render: (_: unknown, r: AttendancePending) => {
+        const k = getKind(r);
+        return <Tag color={k.color}>{k.label}</Tag>;
+      },
+    },
+    {
+      title: "Empleado",
+      render: (_: unknown, r: AttendancePending) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{r.employee_name ?? "—"}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>{r.employee_no ?? "—"}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "Registrado por",
+      render: (_: unknown, r: AttendancePending) => {
+        if (r.supervisor_name) return <Text>{r.supervisor_name}</Text>;
+        const v = getViolation(r.notes);
+        return <Text type="secondary" style={{ fontSize: 11 }}>{v ?? "Autoregistro"}</Text>;
+      },
+    },
+    {
+      title: "Movimiento",
+      dataIndex: "type",
+      render: (t: string) =>
+        t === "check_in"
+          ? <Tag color="green">Entrada</Tag>
+          : <Tag color="red">Salida</Tag>,
+    },
+    {
+      title: "Hora solicitada",
+      dataIndex: "timestamp",
+      render: (ts: string) => dayjs.utc(ts).tz(TZ).format("DD/MM HH:mm"),
+    },
+    {
+      title: "Acciones",
+      render: (_: unknown, r: AttendancePending) => (
+        <Space>
+          <Button
+            type="primary"
+            size="small"
+            icon={<CheckCircleOutlined />}
+            onClick={() => onApprove(r.id)}
+          >
+            Aprobar
+          </Button>
+          <Button
+            danger
+            size="small"
+            icon={<CloseCircleOutlined />}
+            onClick={() => onReject(r.id)}
+          >
+            Rechazar
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <Card
+      title={
+        <Space>
+          <HourglassOutlined style={{ color: "#faad14" }} />
+          <span>Solicitudes de Asistencia</span>
+          <Badge count={items.length} showZero color={items.length > 0 ? "#faad14" : "#ccc"} />
+        </Space>
+      }
+      loading={loading}
+      style={{ marginBottom: 16 }}
+    >
+      {items.length === 0 ? (
+        <Empty description="Sin solicitudes de asistencia pendientes" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      ) : (
+        <Table
+          dataSource={items}
+          columns={columns}
+          rowKey="id"
+          pagination={false}
+          size="small"
+        />
+      )}
+    </Card>
+  );
+};
+
+// ── Sección: Solicitudes de Segundo Turno ─────────────────────────────────
+
+const ExtraShiftSection = ({
+  items, loading, onApprove, onReject,
+}: {
+  items: ExtraShiftReq[];
+  loading: boolean;
+  onApprove: (id: number) => void;
+  onReject: (id: number) => void;
+}) => {
+  const columns = [
+    {
+      title: "Empleado",
+      render: (_: unknown, r: ExtraShiftReq) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{r.employee_name ?? "—"}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>{r.employee_no ?? "—"}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "Fecha",
+      dataIndex: "date",
+      render: (d: string) => dayjs(d).format("DD/MM/YYYY"),
+    },
+    {
+      title: "Solicitado",
+      dataIndex: "created_at",
+      render: (ts: string) => dayjs.utc(ts).tz(TZ).format("HH:mm"),
+    },
+    {
+      title: "Acciones",
+      render: (_: unknown, r: ExtraShiftReq) => (
+        <Space>
+          <Button
+            type="primary"
+            size="small"
+            icon={<CheckCircleOutlined />}
+            onClick={() => onApprove(r.id)}
+          >
+            Autorizar
+          </Button>
+          <Button
+            danger
+            size="small"
+            icon={<CloseCircleOutlined />}
+            onClick={() => onReject(r.id)}
+          >
+            Rechazar
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <Card
+      title={
+        <Space>
+          <SwapOutlined style={{ color: "#1677ff" }} />
+          <span>Solicitudes de Segundo Turno</span>
+          <Badge count={items.length} showZero color={items.length > 0 ? "#1677ff" : "#ccc"} />
+        </Space>
+      }
+      loading={loading}
+      style={{ marginBottom: 16 }}
+    >
+      {items.length === 0 ? (
+        <Empty description="Sin solicitudes de segundo turno" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      ) : (
+        <Table
+          dataSource={items}
+          columns={columns}
+          rowKey="id"
+          pagination={false}
+          size="small"
+        />
+      )}
+    </Card>
+  );
 };
 
 // ── Sección: Solicitudes Pendientes ───────────────────────────────────────
@@ -307,11 +532,17 @@ const AbsenceAlertsSection = ({
 // ── Dashboard principal ────────────────────────────────────────────────────
 
 export const SupervisorDashboard = () => {
-  const [requests, setRequests]   = useState<PendingRequest[]>([]);
-  const [openShifts, setOpen]     = useState<OpenShift[]>([]);
-  const [alerts, setAlerts]       = useState<AbsenceAlert[]>([]);
-  const [loading, setLoading]     = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [requests,    setRequests]    = useState<PendingRequest[]>([]);
+  const [openShifts,  setOpen]        = useState<OpenShift[]>([]);
+  const [alerts,      setAlerts]      = useState<AbsenceAlert[]>([]);
+  const [attPending,  setAttPending]  = useState<AttendancePending[]>([]);
+  const [extraShifts, setExtraShifts] = useState<ExtraShiftReq[]>([]);
+  const [loading,     setLoading]     = useState(false);
+  const [lastUpdate,  setLastUpdate]  = useState<Date>(new Date());
+
+  // Modal de rechazo de solicitud de asistencia
+  const [rejectModal, setRejectModal] = useState<{ id: number; notes: string } | null>(null);
+  const [rejectLoading, setRejectLoading] = useState(false);
 
   // Modal de decisión de falta
   const [absenceModal, setAbsenceModal] = useState<{
@@ -325,14 +556,18 @@ export const SupervisorDashboard = () => {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [reqRes, openRes, alertRes] = await Promise.allSettled([
+      const [reqRes, openRes, alertRes, attRes, extraRes] = await Promise.allSettled([
         axiosInstance.get("/shifts/requests/pending"),
         axiosInstance.get("/shifts/supervisor/open-shifts"),
         axiosInstance.get("/shifts/supervisor/absence-alerts"),
+        axiosInstance.get("/attendance/pending"),
+        axiosInstance.get("/attendance/extra-shifts/pending"),
       ]);
       if (reqRes.status   === "fulfilled") setRequests(reqRes.value.data);
       if (openRes.status  === "fulfilled") setOpen(openRes.value.data);
       if (alertRes.status === "fulfilled") setAlerts(alertRes.value.data);
+      if (attRes.status   === "fulfilled") setAttPending(attRes.value.data);
+      if (extraRes.status === "fulfilled") setExtraShifts(extraRes.value.data);
       setLastUpdate(new Date());
     } catch {
       // errores individuales ya manejados por Promise.allSettled
@@ -439,7 +674,57 @@ export const SupervisorDashboard = () => {
     }
   };
 
-  const totalAlerts = requests.length + openShifts.length + alerts.length;
+  // ── Handlers: solicitudes de asistencia ────────────────────────────────
+  const handleAttApprove = async (id: number) => {
+    try {
+      await axiosInstance.patch(`/attendance/${id}/approve`);
+      message.success("Solicitud aprobada.");
+      fetchAll();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al aprobar.");
+    }
+  };
+
+  const handleAttReject = async () => {
+    if (!rejectModal) return;
+    setRejectLoading(true);
+    try {
+      await axiosInstance.patch(`/attendance/${rejectModal.id}/reject`, {
+        notes: rejectModal.notes || null,
+      });
+      message.success("Solicitud rechazada.");
+      setRejectModal(null);
+      fetchAll();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al rechazar.");
+    } finally {
+      setRejectLoading(false);
+    }
+  };
+
+  // ── Handlers: segundo turno ─────────────────────────────────────────────
+  const handleExtraApprove = async (id: number) => {
+    try {
+      await axiosInstance.patch(`/attendance/extra-shifts/${id}/approve`);
+      message.success("Segundo turno autorizado.");
+      fetchAll();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al autorizar.");
+    }
+  };
+
+  const handleExtraReject = async (id: number) => {
+    try {
+      await axiosInstance.patch(`/attendance/extra-shifts/${id}/reject`, { notes: null });
+      message.success("Solicitud rechazada.");
+      fetchAll();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al rechazar.");
+    }
+  };
+
+  const totalAlerts = requests.length + openShifts.length + alerts.length
+    + attPending.length + extraShifts.length;
 
   return (
     <div>
@@ -472,6 +757,18 @@ export const SupervisorDashboard = () => {
         </div>
       ) : (
         <>
+          <AttendancePendingSection
+            items={attPending}
+            loading={false}
+            onApprove={handleAttApprove}
+            onReject={(id) => setRejectModal({ id, notes: "" })}
+          />
+          <ExtraShiftSection
+            items={extraShifts}
+            loading={false}
+            onApprove={handleExtraApprove}
+            onReject={handleExtraReject}
+          />
           <PendingRequestsSection
             requests={requests}
             loading={false}
@@ -489,6 +786,29 @@ export const SupervisorDashboard = () => {
           />
         </>
       )}
+
+      {/* Modal rechazo de solicitud de asistencia */}
+      <Modal
+        open={rejectModal !== null}
+        title="Rechazar solicitud de asistencia"
+        onCancel={() => setRejectModal(null)}
+        onOk={handleAttReject}
+        okText="Rechazar"
+        okButtonProps={{ danger: true, loading: rejectLoading }}
+        cancelText="Cancelar"
+      >
+        <Typography.Paragraph>
+          Puedes agregar un motivo opcional de rechazo:
+        </Typography.Paragraph>
+        <Input.TextArea
+          rows={3}
+          placeholder="Motivo de rechazo (opcional)"
+          value={rejectModal?.notes ?? ""}
+          onChange={(e) =>
+            setRejectModal((prev) => prev ? { ...prev, notes: e.target.value } : prev)
+          }
+        />
+      </Modal>
 
       {/* Modal decisión de falta */}
       <Modal

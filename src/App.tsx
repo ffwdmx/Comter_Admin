@@ -15,7 +15,6 @@ import {
   AuditOutlined,
   BugOutlined,
   BarChartOutlined,
-  HourglassOutlined,
 } from "@ant-design/icons";
 import "@refinedev/antd/dist/reset.css";
 
@@ -32,7 +31,6 @@ import { ShiftTypeList }             from "./pages/shifts/list";
 import { ShiftTypeCreate, ShiftTypeEdit } from "./pages/shifts/form";
 import { SupervisorDashboard }       from "./pages/supervisor/dashboard";
 import { WeeklyReview }             from "./pages/attendance/WeeklyReview";
-import { PendingRequests }          from "./pages/attendance/PendingRequests";
 import { QCProjectList }            from "./pages/quality-control/projects/list";
 import { QCProjectCreate, QCProjectEdit } from "./pages/quality-control/projects/form";
 import { QCProjectDetail }          from "./pages/quality-control/projects/detail";
@@ -104,11 +102,6 @@ export default function App() {
                 name: "attendance",
                 list: "/attendance",
                 meta: { label: "Asistencia Semanal", icon: <CalendarOutlined /> },
-              },
-              {
-                name: "pending-requests",
-                list: "/attendance/pending",
-                meta: { label: "Solicitudes Pendientes", icon: <HourglassOutlined /> },
               },
               {
                 name: "qc-projects",
@@ -194,7 +187,6 @@ export default function App() {
 
                 <Route path="/supervisor" element={<SupervisorDashboard />} />
                 <Route path="/attendance" element={<WeeklyReview />} />
-                <Route path="/attendance/pending" element={<PendingRequests />} />
 
                 <Route path="/quality-control/projects">
                   <Route index              element={<QCProjectList />}   />

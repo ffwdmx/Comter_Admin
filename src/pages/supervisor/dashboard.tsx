@@ -8,7 +8,7 @@ import {
   ClockCircleOutlined, UserOutlined, ExclamationCircleOutlined,
   CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined,
   DollarOutlined, MinusCircleOutlined, WarningOutlined,
-  HourglassOutlined, SwapOutlined,
+  HourglassOutlined, SwapOutlined, UserDeleteOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -75,6 +75,12 @@ interface ExtraShiftReq {
   employee_no:   string | null;
   date:          string;
   created_at:    string;
+}
+
+interface UnassignedEmployee {
+  employee_id:   number;
+  employee_name: string;
+  employee_no:   string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -280,6 +286,61 @@ const ExtraShiftSection = ({
           size="small"
         />
       )}
+    </Card>
+  );
+};
+
+// ── Sección: Empleados sin turno asignado ─────────────────────────────────────
+
+const UnassignedSection = ({
+  items, loading,
+}: {
+  items: UnassignedEmployee[];
+  loading: boolean;
+}) => {
+  const columns = [
+    {
+      title: "Empleado",
+      render: (_: unknown, r: UnassignedEmployee) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{r.employee_name}</Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>{r.employee_no}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: "Estado",
+      render: () => <Tag color="red">Sin turno asignado</Tag>,
+    },
+  ];
+
+  if (items.length === 0) return null;
+
+  return (
+    <Card
+      title={
+        <Space>
+          <UserDeleteOutlined style={{ color: "#ff4d4f" }} />
+          <span>Empleados sin Turno Asignado</span>
+          <Badge count={items.length} showZero color="#ff4d4f" />
+        </Space>
+      }
+      loading={loading}
+      style={{ marginBottom: 16, borderColor: "#ff4d4f" }}
+    >
+      <Alert
+        type="error"
+        showIcon
+        message="Estos empleados no pueden registrar entrada hasta tener un turno asignado."
+        style={{ marginBottom: 12 }}
+      />
+      <Table
+        dataSource={items}
+        columns={columns}
+        rowKey="employee_id"
+        pagination={false}
+        size="small"
+      />
     </Card>
   );
 };
@@ -537,6 +598,7 @@ export const SupervisorDashboard = () => {
   const [alerts,      setAlerts]      = useState<AbsenceAlert[]>([]);
   const [attPending,  setAttPending]  = useState<AttendancePending[]>([]);
   const [extraShifts, setExtraShifts] = useState<ExtraShiftReq[]>([]);
+  const [unassigned,  setUnassigned]  = useState<UnassignedEmployee[]>([]);
   const [loading,     setLoading]     = useState(false);
   const [lastUpdate,  setLastUpdate]  = useState<Date>(new Date());
 
@@ -556,18 +618,20 @@ export const SupervisorDashboard = () => {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [reqRes, openRes, alertRes, attRes, extraRes] = await Promise.allSettled([
+      const [reqRes, openRes, alertRes, attRes, extraRes, unassignedRes] = await Promise.allSettled([
         axiosInstance.get("/shifts/requests/pending"),
         axiosInstance.get("/shifts/supervisor/open-shifts"),
         axiosInstance.get("/shifts/supervisor/absence-alerts"),
         axiosInstance.get("/attendance/pending"),
         axiosInstance.get("/attendance/extra-shifts/pending"),
+        axiosInstance.get("/shifts/supervisor/unassigned-employees"),
       ]);
-      if (reqRes.status   === "fulfilled") setRequests(reqRes.value.data);
-      if (openRes.status  === "fulfilled") setOpen(openRes.value.data);
-      if (alertRes.status === "fulfilled") setAlerts(alertRes.value.data);
-      if (attRes.status   === "fulfilled") setAttPending(attRes.value.data);
-      if (extraRes.status === "fulfilled") setExtraShifts(extraRes.value.data);
+      if (reqRes.status        === "fulfilled") setRequests(reqRes.value.data);
+      if (openRes.status       === "fulfilled") setOpen(openRes.value.data);
+      if (alertRes.status      === "fulfilled") setAlerts(alertRes.value.data);
+      if (attRes.status        === "fulfilled") setAttPending(attRes.value.data);
+      if (extraRes.status      === "fulfilled") setExtraShifts(extraRes.value.data);
+      if (unassignedRes.status === "fulfilled") setUnassigned(unassignedRes.value.data);
       setLastUpdate(new Date());
     } catch {
       // errores individuales ya manejados por Promise.allSettled
@@ -724,7 +788,7 @@ export const SupervisorDashboard = () => {
   };
 
   const totalAlerts = requests.length + openShifts.length + alerts.length
-    + attPending.length + extraShifts.length;
+    + attPending.length + extraShifts.length + unassigned.length;
 
   return (
     <div>
@@ -757,6 +821,10 @@ export const SupervisorDashboard = () => {
         </div>
       ) : (
         <>
+          <UnassignedSection
+            items={unassigned}
+            loading={false}
+          />
           <AttendancePendingSection
             items={attPending}
             loading={false}

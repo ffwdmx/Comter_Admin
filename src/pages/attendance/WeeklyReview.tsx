@@ -528,22 +528,22 @@ export function WeeklyReview() {
           >
             + Permiso / Incapacidad
           </Button>
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            loading={sending}
-            onClick={() =>
-              Modal.confirm({
-                title:   "¿Enviar reporte al contador?",
-                content: `Se enviará el reporte de la semana ${weekStart.format("DD/MM")} – ${weekStart.add(6, "day").format("DD/MM/YYYY")} por correo electrónico.`,
-                okText:  "Enviar",
-                cancelText: "Cancelar",
-                onOk:    handleSendReport,
-              })
-            }
+          <Popconfirm
+            title="¿Enviar reporte al contador?"
+            description={`Semana ${weekStart.format("DD/MM")} – ${weekStart.add(6, "day").format("DD/MM/YYYY")} por correo electrónico.`}
+            okText="Enviar"
+            cancelText="Cancelar"
+            okButtonProps={{ loading: sending }}
+            onConfirm={handleSendReport}
           >
-            Enviar Reporte por Email
-          </Button>
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              loading={sending}
+            >
+              Enviar Reporte por Email
+            </Button>
+          </Popconfirm>
         </Space>
       </div>
 

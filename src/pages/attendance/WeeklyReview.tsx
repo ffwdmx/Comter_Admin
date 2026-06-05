@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Table, Tag, Button, Modal, Form, TimePicker, Select,
-  Space, Typography, Spin, Tooltip, DatePicker, message,
+  Space, Typography, Spin, Tooltip, DatePicker, App,
   Popconfirm, Radio, InputNumber, Input, Badge,
 } from "antd";
 import {
@@ -124,6 +124,8 @@ function buildSpecialEventsMap(events: SpecialEvent[]): SpecialEventsMap {
 // ── Componente principal ────────────────────────────────────────────────────
 
 export function WeeklyReview() {
+  const { message } = App.useApp();
+
   const [weekStart, setWeekStart] = useState<Dayjs>(getDefaultWeekStart);
   const [data, setData]           = useState<WeeklyReviewData | null>(null);
   const [loading, setLoading]     = useState(false);
@@ -217,12 +219,15 @@ export function WeeklyReview() {
   const handleSendReport = async () => {
     setSending(true);
     try {
-      const res = await axiosInstance.post("/attendance/send-report", {
-        week_start: weekStart.format("YYYY-MM-DD"),
-      });
-      message.success(res.data.message ?? "Reporte enviado correctamente.");
+      const res = await axiosInstance.post(
+        "/attendance/send-report",
+        { week_start: weekStart.format("YYYY-MM-DD") },
+        { timeout: 60_000 },
+      );
+      message.success(res.data.message ?? "Reporte enviado correctamente.", 6);
     } catch (err: any) {
-      message.error(err?.response?.data?.detail ?? "Error al enviar el reporte.");
+      const detail = err?.response?.data?.detail ?? err?.message ?? "Error al enviar el reporte.";
+      message.error(detail, 8);
     } finally {
       setSending(false);
     }

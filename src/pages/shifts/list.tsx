@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Table, Button, Tag, Space, Typography, Card, Select,
-  Popconfirm, message, Tooltip,
+  Popconfirm, App, Tooltip,
 } from "antd";
 import {
   PlusOutlined, EditOutlined, CheckCircleOutlined,
@@ -34,6 +34,7 @@ interface Plant {
 }
 
 export const ShiftTypeList = () => {
+  const { message } = App.useApp();
   const navigate = useNavigate();
   const [shifts, setShifts]     = useState<ShiftType[]>([]);
   const [plants, setPlants]     = useState<Plant[]>([]);

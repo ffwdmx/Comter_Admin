@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import {
   Card, Row, Col, Select, DatePicker, Button, Typography, Space,
-  Divider, Alert, Statistic, Table, Tag, message, Spin,
+  Divider, Alert, Statistic, Table, Tag, App, Spin,
 } from "antd";
 import {
   FileExcelOutlined, FilePdfOutlined, ReloadOutlined, BarChartOutlined,
@@ -39,6 +39,7 @@ const SEV_COLOR: Record<string, string> = {
 };
 
 export const ReportGenerator = () => {
+  const { message } = App.useApp();
   const [projects,  setProjects]  = useState<QCProject[]>([]);
   const [projectId, setProjectId] = useState<number | null>(null);
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>([null, null]);

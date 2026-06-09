@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Card, Row, Col, Tag, Typography, Button, Tabs, Table, Space, Statistic,
-  Modal, Form, Select, message, Tooltip, Spin, Empty, Alert,
+  Modal, Form, Select, App, Tooltip, Spin, Empty, Alert,
 } from "antd";
 import {
   ArrowLeftOutlined, CheckCircleOutlined, CloseCircleOutlined,
@@ -170,6 +170,7 @@ const ParetoChart = ({ data }: { data: ParetoPoint[] }) => {
 // ── Main Component ─────────────────────────────────────────────────────────
 
 export const QCProjectDetail = () => {
+  const { message } = App.useApp();
   const { id }      = useParams<{ id: string }>();
   const navigate    = useNavigate();
   const projectId   = Number(id);

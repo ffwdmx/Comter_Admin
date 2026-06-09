@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import {
   Table, Tag, Typography, Button, Space, Input, Select, Modal,
-  Form, message, Tooltip, Switch, Divider,
+  Form, App, Tooltip, Switch, Divider,
 } from "antd";
 import {
   PlusOutlined, EditOutlined, SearchOutlined, ReloadOutlined,
@@ -40,6 +40,7 @@ const SEV_LABEL: Record<string, string> = {
 };
 
 export const DefectTypeList = () => {
+  const { message } = App.useApp();
   const [defectTypes, setDefectTypes] = useState<QCDefectType[]>([]);
   const [projects,    setProjects]    = useState<QCProject[]>([]);
   const [loading,     setLoading]     = useState(false);

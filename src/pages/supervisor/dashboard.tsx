@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Card, Col, Row, Typography, Tag, Button, Space, Badge,
-  Table, Modal, message, Divider, Empty, Spin, Statistic,
+  Table, Modal, App, Divider, Empty, Spin, Statistic,
   Alert, Input,
 } from "antd";
 import {
@@ -593,6 +593,7 @@ const AbsenceAlertsSection = ({
 // ── Dashboard principal ────────────────────────────────────────────────────
 
 export const SupervisorDashboard = () => {
+  const { message } = App.useApp();
   const [requests,    setRequests]    = useState<PendingRequest[]>([]);
   const [openShifts,  setOpen]        = useState<OpenShift[]>([]);
   const [alerts,      setAlerts]      = useState<AbsenceAlert[]>([]);

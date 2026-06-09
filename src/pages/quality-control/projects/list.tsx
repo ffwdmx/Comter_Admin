@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Table, Tag, Button, Space, Typography, Input, Select, Tooltip, message,
+  Table, Tag, Button, Space, Typography, Input, Select, Tooltip, App,
 } from "antd";
 import {
   PlusOutlined, EyeOutlined, EditOutlined, SearchOutlined,
@@ -35,6 +35,7 @@ const COMPONENT_LABELS: Record<string, string> = {
 };
 
 export const QCProjectList = () => {
+  const { message } = App.useApp();
   const [projects, setProjects]   = useState<QCProjectListItem[]>([]);
   const [loading, setLoading]     = useState(false);
   const [search, setSearch]       = useState("");

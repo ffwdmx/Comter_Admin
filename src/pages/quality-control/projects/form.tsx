@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Form, Input, Select, InputNumber, Button, Card, Row, Col,
-  Typography, Divider, message, Spin,
+  Typography, Divider, App, Spin,
 } from "antd";
 import { ArrowLeftOutlined, SaveOutlined } from "@ant-design/icons";
 import { axiosInstance } from "../../../providers/dataProvider";
@@ -14,6 +14,7 @@ export const QCProjectCreate = () => <QCProjectForm mode="create" />;
 export const QCProjectEdit   = () => <QCProjectForm mode="edit"   />;
 
 const QCProjectForm = ({ mode }: { mode: "create" | "edit" }) => {
+  const { message } = App.useApp();
   const [form]    = Form.useForm();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);

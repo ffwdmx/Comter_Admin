@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import {
   Table, Tag, Typography, Button, Space, Select, DatePicker, Input,
-  Tooltip, message, Modal, Form, Drawer, Descriptions, Statistic,
+  Tooltip, App, Modal, Form, Drawer, Descriptions, Statistic,
   Row, Col, Divider,
 } from "antd";
 import {
@@ -52,6 +52,7 @@ const YIELD_COLOR: Record<string, string> = {
 };
 
 export const InspectionReview = () => {
+  const { message } = App.useApp();
   const [inspections, setInspections] = useState<QCInspection[]>([]);
   const [projects,    setProjects]    = useState<QCProject[]>([]);
   const [loading,     setLoading]     = useState(false);

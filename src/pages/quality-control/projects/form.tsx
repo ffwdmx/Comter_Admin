@@ -83,8 +83,7 @@ const QCProjectForm = ({ mode }: { mode: "create" | "edit" }) => {
           onFinish={onFinish}
           initialValues={{
             status:                 "active",
-            component_type:         "electronic",
-            inspection_type:        "sampling",
+            inspection_type:        "full",
             opportunities_per_unit: 1,
             target_yield:           98,
             min_acceptable_yield:   95,
@@ -122,9 +121,8 @@ const QCProjectForm = ({ mode }: { mode: "create" | "edit" }) => {
               <Form.Item label="Estado" name="status" rules={[{ required: true }]}>
                 <Select
                   options={[
-                    { label: "Activo",    value: "active"    },
-                    { label: "En pausa",  value: "paused"    },
-                    { label: "Terminado", value: "completed" },
+                    { label: "Activo",   value: "active"   },
+                    { label: "Inactivo", value: "inactive" },
                   ]}
                 />
               </Form.Item>
@@ -133,14 +131,16 @@ const QCProjectForm = ({ mode }: { mode: "create" | "edit" }) => {
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item label="Tipo de componente" name="component_type" rules={[{ required: true }]}>
+              <Form.Item label="Tipo de componente" name="component_type" rules={[{ required: true, message: "Selecciona el tipo de componente" }]}>
                 <Select
+                  placeholder="Seleccionar tipo"
                   options={[
-                    { label: "Electrónico", value: "electronic"  },
-                    { label: "Mecánico",    value: "mechanical"  },
-                    { label: "Ensamble",    value: "assembly"    },
-                    { label: "Plástico",    value: "plastic"     },
-                    { label: "Otro",        value: "other"       },
+                    { label: "Conector",  value: "connector" },
+                    { label: "Arnés",     value: "harness"   },
+                    { label: "Cable",     value: "cable"     },
+                    { label: "Sensor",    value: "sensor"    },
+                    { label: "PCB",       value: "pcb"       },
+                    { label: "Sello",     value: "seal"      },
                   ]}
                 />
               </Form.Item>
@@ -149,9 +149,11 @@ const QCProjectForm = ({ mode }: { mode: "create" | "edit" }) => {
               <Form.Item label="Tipo de inspección" name="inspection_type" rules={[{ required: true }]}>
                 <Select
                   options={[
-                    { label: "Muestreo",  value: "sampling" },
-                    { label: "100%",      value: "full"     },
-                    { label: "Por lote",  value: "batch"    },
+                    { label: "Visual",       value: "visual"       },
+                    { label: "Dimensional",  value: "dimensional"  },
+                    { label: "Eléctrica",    value: "electrical"   },
+                    { label: "Funcional",    value: "functional"   },
+                    { label: "100%",         value: "full"         },
                   ]}
                 />
               </Form.Item>

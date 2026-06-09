@@ -24,14 +24,14 @@ interface QCProjectListItem {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  active: "Activo", paused: "En pausa", completed: "Terminado",
+  active: "Activo", inactive: "Inactivo",
 };
 const STATUS_COLORS: Record<string, string> = {
-  active: "green", paused: "orange", completed: "default",
+  active: "green", inactive: "default",
 };
 const COMPONENT_LABELS: Record<string, string> = {
-  electronic: "Electrónico", mechanical: "Mecánico",
-  assembly: "Ensamble", plastic: "Plástico", other: "Otro",
+  connector: "Conector", harness: "Arnés", cable: "Cable",
+  sensor: "Sensor", pcb: "PCB", seal: "Sello",
 };
 
 export const QCProjectList = () => {
@@ -108,9 +108,8 @@ export const QCProjectList = () => {
           value={statusFilter}
           onChange={setStatusFilter}
           options={[
-            { label: "Activo",     value: "active"    },
-            { label: "En pausa",   value: "paused"    },
-            { label: "Terminado",  value: "completed" },
+            { label: "Activo",   value: "active"   },
+            { label: "Inactivo", value: "inactive" },
           ]}
         />
       </Space>

@@ -25,12 +25,12 @@ interface QCDefectType {
 interface QCProject { id: number; name: string; }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  visual:       "Visual",
-  dimensional:  "Dimensional",
-  functional:   "Funcional",
-  cosmetic:     "Cosmético",
-  documentation:"Documentación",
-  other:        "Otro",
+  visual:      "Visual",
+  dimensional: "Dimensional",
+  electrical:  "Eléctrico",
+  functional:  "Funcional",
+  packaging:   "Empaque",
+  other:       "Otro",
 };
 const SEV_COLOR: Record<string, string> = {
   critical: "red", major: "orange", minor: "gold",
@@ -56,15 +56,18 @@ export const DefectTypeList = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const [{ data: dts }, { data: projs }] = await Promise.all([
-        axiosInstance.get("/qc/defect-types/"),
-        axiosInstance.get("/qc/projects/"),
-      ]);
-      const list = Array.isArray(dts) ? dts : [];
-      setDefectTypes(list);
-      setProjects(Array.isArray(projs) ? projs : []);
+      const { data: dts } = await axiosInstance.get("/qc/defect-types/");
+      setDefectTypes(Array.isArray(dts) ? dts : []);
+    } catch {
+      message.error("Error cargando tipos de defecto");
     } finally {
       setLoading(false);
+    }
+    try {
+      const { data: projs } = await axiosInstance.get("/qc/projects/?all=true&limit=200");
+      setProjects(Array.isArray(projs) ? projs : []);
+    } catch {
+      message.error("Error cargando lista de proyectos");
     }
   };
 

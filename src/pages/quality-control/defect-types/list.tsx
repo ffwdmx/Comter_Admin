@@ -96,12 +96,14 @@ export const DefectTypeList = () => {
 
   const onSave = async (values: Record<string, unknown>) => {
     setSaving(true);
+    // allowClear deja project_id como undefined; lo normalizamos a null para que el backend lo reciba y limpie la asignación
+    const payload = { ...values, project_id: values.project_id ?? null };
     try {
       if (editing) {
-        await axiosInstance.patch(`/qc/defect-types/${editing.id}`, values);
+        await axiosInstance.patch(`/qc/defect-types/${editing.id}`, payload);
         message.success("Tipo de defecto actualizado");
       } else {
-        await axiosInstance.post("/qc/defect-types/", values);
+        await axiosInstance.post("/qc/defect-types/", payload);
         message.success("Tipo de defecto creado");
       }
       setModalOpen(false);

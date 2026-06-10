@@ -56,7 +56,7 @@ export const DefectTypeList = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const { data: dts } = await axiosInstance.get("/qc/defect-types/");
+      const { data: dts } = await axiosInstance.get("/qc/defect-types/?all=true");
       setDefectTypes(Array.isArray(dts) ? dts : []);
     } catch {
       message.error("Error cargando tipos de defecto");

@@ -3,12 +3,12 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Table, Tag, Button, Modal, Form, TimePicker, Select,
   Space, Typography, Spin, Tooltip, DatePicker, App,
-  Popconfirm, Radio, InputNumber, Input, Badge,
+  Popconfirm, Radio, InputNumber, Input, Badge, Alert,
 } from "antd";
 import {
   LeftOutlined, RightOutlined, PlusOutlined,
   EditOutlined, DeleteOutlined, SendOutlined, StopOutlined,
-  MedicineBoxOutlined,
+  MedicineBoxOutlined, CheckOutlined, CloseOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -60,7 +60,7 @@ interface SpecialEvent {
   employee_id:         number;
   employee_name:       string;
   employee_no:         string;
-  event_type:          "permiso_sin_goce" | "incapacidad";
+  event_type:          "permiso_sin_goce" | "incapacidad" | "vacaciones";
   start_date:          string;
   end_date:            string;
   partial_hours:       number | null;
@@ -68,15 +68,18 @@ interface SpecialEvent {
   imss_folio:          string | null;
   registered_by:       number | null;
   registered_by_name:  string;
+  approval_status:     "pending" | "approved" | "rejected";
+  approved_by:         number | null;
+  approved_by_name:    string;
+  corrects_absence:    boolean;
   is_active:           boolean;
   total_days:          number;
 }
 
-// event info expanded per-day
 interface DaySpecialStatus {
-  event:                SpecialEvent;
+  event:                  SpecialEvent;
   day_number_in_sequence: number;
-  imss_responsibility:  boolean;
+  imss_responsibility:    boolean;
 }
 
 type SpecialEventsMap = Record<number, Record<string, DaySpecialStatus>>;
@@ -103,9 +106,10 @@ const DAY_NAMES_ES: Record<number, string> = {
 function buildSpecialEventsMap(events: SpecialEvent[]): SpecialEventsMap {
   const map: SpecialEventsMap = {};
   for (const event of events) {
+    if (event.approval_status === "rejected") continue;
     if (!map[event.employee_id]) map[event.employee_id] = {};
-    let current = new Date(event.start_date + "T00:00:00");
-    const end   = new Date(event.end_date   + "T00:00:00");
+    let current  = new Date(event.start_date + "T00:00:00");
+    const end    = new Date(event.end_date   + "T00:00:00");
     let dayNumber = 1;
     while (current <= end) {
       const dateStr = current.toISOString().split("T")[0];
@@ -131,6 +135,7 @@ export function WeeklyReview() {
   const [loading, setLoading]     = useState(false);
   const [sending, setSending]     = useState(false);
   const [specialEventsMap, setSpecialEventsMap] = useState<SpecialEventsMap>({});
+  const [pendingCorrections, setPendingCorrections] = useState<SpecialEvent[]>([]);
 
   // Modal: agregar registro de asistencia
   const [addModal, setAddModal] = useState<{
@@ -163,10 +168,10 @@ export function WeeklyReview() {
   } | null>(null);
   const [bajaForm] = Form.useForm();
 
-  // Modal: registrar permiso/incapacidad
+  // Modal: registrar permiso/incapacidad/vacaciones (flujo normal)
   const [specialModal, setSpecialModal] = useState(false);
   const [specialForm] = Form.useForm();
-  const [specialEventType, setSpecialEventType] = useState<"permiso_sin_goce" | "incapacidad">("permiso_sin_goce");
+  const [specialEventType, setSpecialEventType] = useState<"permiso_sin_goce" | "incapacidad" | "vacaciones">("permiso_sin_goce");
   const [submittingSpecial, setSubmittingSpecial] = useState(false);
 
   // Modal: editar/cancelar evento especial existente
@@ -178,12 +183,30 @@ export function WeeklyReview() {
   const [editSpecialForm] = Form.useForm();
   const [submittingEditSpecial, setSubmittingEditSpecial] = useState(false);
 
+  // Modal: corregir falta → asignar permiso/vacaciones (flujo de corrección pendiente)
+  const [correctionModal, setCorrectionModal] = useState<{
+    open: boolean;
+    employeeId:   number;
+    employeeName: string;
+    date:         string;
+  } | null>(null);
+  const [correctionForm] = Form.useForm();
+  const [correctionEventType, setCorrectionEventType] = useState<"permiso_sin_goce" | "incapacidad" | "vacaciones">("permiso_sin_goce");
+  const [submittingCorrection, setSubmittingCorrection] = useState(false);
+
+  // Modal: rechazar corrección
+  const [rejectModal, setRejectModal] = useState<{
+    open: boolean;
+    eventId: number;
+  } | null>(null);
+  const [rejectForm] = Form.useForm();
+
   // ── Carga de datos ──────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [reviewRes, specialRes] = await Promise.all([
+      const [reviewRes, specialRes, pendingRes] = await Promise.all([
         axiosInstance.get("/attendance/weekly-review", {
           params: { week_start: weekStart.format("YYYY-MM-DD") },
         }),
@@ -194,9 +217,13 @@ export function WeeklyReview() {
             limit:     500,
           },
         }),
+        axiosInstance.get("/attendance/special/", {
+          params: { approval_status: "pending", limit: 200 },
+        }),
       ]);
       setData(reviewRes.data);
       setSpecialEventsMap(buildSpecialEventsMap(specialRes.data));
+      setPendingCorrections(Array.isArray(pendingRes.data) ? pendingRes.data : []);
     } catch {
       message.error("Error al cargar la asistencia semanal.");
     } finally {
@@ -332,7 +359,7 @@ export function WeeklyReview() {
     }
   };
 
-  // ── Registrar permiso/incapacidad ───────────────────────────────────────
+  // ── Registrar permiso/incapacidad/vacaciones (flujo normal) ────────────
 
   const handleSpecialSubmit = async () => {
     setSubmittingSpecial(true);
@@ -347,6 +374,7 @@ export function WeeklyReview() {
         partial_hours: values.partial_hours ?? null,
         notes:         values.notes ?? null,
         imss_folio:    values.imss_folio ?? null,
+        corrects_absence: false,
       });
       message.success("Evento registrado correctamente.");
       setSpecialModal(false);
@@ -369,9 +397,9 @@ export function WeeklyReview() {
     try {
       const values = await editSpecialForm.validateFields();
       const payload: Record<string, any> = {};
-      if (values.end_date)   payload.end_date  = (values.end_date as Dayjs).format("YYYY-MM-DD");
-      if (values.notes)      payload.notes     = values.notes;
-      if (values.imss_folio) payload.imss_folio = values.imss_folio;
+      if (values.end_date)   payload.end_date   = (values.end_date as Dayjs).format("YYYY-MM-DD");
+      if (values.notes)      payload.notes       = values.notes;
+      if (values.imss_folio) payload.imss_folio  = values.imss_folio;
       await axiosInstance.patch(
         `/attendance/special/${editSpecialModal.event.id}`,
         payload,
@@ -396,6 +424,68 @@ export function WeeklyReview() {
       fetchData();
     } catch (err: any) {
       message.error(err?.response?.data?.detail ?? "Error al cancelar el evento.");
+    }
+  };
+
+  // ── Corregir falta → crear corrección pendiente ─────────────────────────
+
+  const handleCorrectionSubmit = async () => {
+    if (!correctionModal) return;
+    setSubmittingCorrection(true);
+    try {
+      const values = await correctionForm.validateFields();
+      const endDate = values.end_date
+        ? (values.end_date as Dayjs).format("YYYY-MM-DD")
+        : correctionModal.date;
+
+      await axiosInstance.post("/attendance/special/", {
+        employee_id:      correctionModal.employeeId,
+        event_type:       values.event_type,
+        start_date:       correctionModal.date,
+        end_date:         endDate,
+        partial_hours:    values.partial_hours ?? null,
+        notes:            values.notes,
+        imss_folio:       values.imss_folio ?? null,
+        corrects_absence: true,
+      });
+      message.success("Corrección enviada — pendiente de aprobación por un administrador.");
+      setCorrectionModal(null);
+      correctionForm.resetFields();
+      setCorrectionEventType("permiso_sin_goce");
+      fetchData();
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      message.error(err?.response?.data?.detail ?? "Error al registrar la corrección.");
+    } finally {
+      setSubmittingCorrection(false);
+    }
+  };
+
+  // ── Aprobar / Rechazar correcciones ─────────────────────────────────────
+
+  const handleApprove = async (eventId: number) => {
+    try {
+      await axiosInstance.patch(`/attendance/special/${eventId}/approve`);
+      message.success("Corrección aprobada.");
+      setEditSpecialModal(null);
+      fetchData();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al aprobar.");
+    }
+  };
+
+  const handleReject = async (eventId: number, notes?: string) => {
+    try {
+      await axiosInstance.patch(`/attendance/special/${eventId}/reject`, {
+        rejection_notes: notes ?? null,
+      });
+      message.success("Corrección rechazada — la falta se restaura.");
+      setRejectModal(null);
+      rejectForm.resetFields();
+      setEditSpecialModal(null);
+      fetchData();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al rechazar.");
     }
   };
 
@@ -504,6 +594,17 @@ export function WeeklyReview() {
               editForm.setFieldsValue({ hora: dayjs.utc(time).tz(TZ) });
             }}
             onDelete={handleDelete}
+            onAssignSpecial={() => {
+              setCorrectionModal({
+                open:         true,
+                employeeId:   row.employee_id,
+                employeeName: row.name,
+                date:         dateStr,
+              });
+              correctionForm.resetFields();
+              correctionForm.setFieldsValue({ event_type: "permiso_sin_goce" });
+              setCorrectionEventType("permiso_sin_goce");
+            }}
           />
         );
       },
@@ -526,7 +627,7 @@ export function WeeklyReview() {
             icon={<MedicineBoxOutlined />}
             onClick={() => setSpecialModal(true)}
           >
-            + Permiso / Incapacidad
+            + Permiso / Incapacidad / Vacaciones
           </Button>
           <Popconfirm
             title="¿Enviar reporte al contador?"
@@ -546,6 +647,76 @@ export function WeeklyReview() {
           </Popconfirm>
         </Space>
       </div>
+
+      {/* ── Correcciones pendientes de aprobación ─────────────────────────── */}
+      {pendingCorrections.length > 0 && (
+        <div style={{
+          background: "#fffbe6",
+          border: "1px solid #ffe58f",
+          borderRadius: 8,
+          padding: "12px 16px",
+          marginBottom: 16,
+        }}>
+          <Text strong style={{ fontSize: 14, color: "#d46b08", display: "block", marginBottom: 10 }}>
+            ⚠ Correcciones de falta pendientes de aprobación ({pendingCorrections.length})
+          </Text>
+          <Space direction="vertical" style={{ width: "100%" }} size={6}>
+            {pendingCorrections.map(evt => (
+              <div key={evt.id} style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                background: "white", borderRadius: 6, padding: "8px 12px",
+                border: "1px solid #ffd591",
+              }}>
+                <Space size={8} wrap>
+                  <Text strong style={{ fontSize: 12 }}>{evt.employee_name}</Text>
+                  <Text type="secondary" style={{ fontSize: 11 }}>({evt.employee_no})</Text>
+                  <Tag color="orange" style={{ fontSize: 10 }}>
+                    {evt.event_type === "vacaciones"
+                      ? "VACACIONES"
+                      : evt.event_type === "permiso_sin_goce"
+                      ? "PERMISO"
+                      : "INCAPACIDAD"}
+                  </Tag>
+                  <Text style={{ fontSize: 11 }}>
+                    {dayjs(evt.start_date).format("DD/MM")} — {dayjs(evt.end_date).format("DD/MM/YYYY")}
+                  </Text>
+                  {evt.notes && (
+                    <Tooltip title={evt.notes}>
+                      <Text type="secondary" style={{ fontSize: 11, fontStyle: "italic" }}>
+                        "{evt.notes.length > 50 ? evt.notes.slice(0, 47) + "…" : evt.notes}"
+                      </Text>
+                    </Tooltip>
+                  )}
+                  <Text type="secondary" style={{ fontSize: 10 }}>
+                    Registrado por: {evt.registered_by_name}
+                  </Text>
+                </Space>
+                <Space>
+                  <Popconfirm
+                    title="¿Aprobar esta corrección?"
+                    description="La falta será reemplazada por el evento indicado."
+                    okText="Aprobar"
+                    cancelText="Cancelar"
+                    onConfirm={() => handleApprove(evt.id)}
+                  >
+                    <Button size="small" type="primary" icon={<CheckOutlined />}>
+                      Aprobar
+                    </Button>
+                  </Popconfirm>
+                  <Button
+                    size="small"
+                    danger
+                    icon={<CloseOutlined />}
+                    onClick={() => setRejectModal({ open: true, eventId: evt.id })}
+                  >
+                    Rechazar
+                  </Button>
+                </Space>
+              </div>
+            ))}
+          </Space>
+        </div>
+      )}
 
       {/* Navegación de semana */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -578,12 +749,14 @@ export function WeeklyReview() {
 
       {/* Leyenda de colores */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12, fontSize: 12, color: "#555" }}>
-        <span><Badge color="green"  /> Entrada registrada</span>
-        <span><Badge color="gold"   /> Salida registrada</span>
-        <span><Badge color="red"    /> Falta</span>
-        <span><Badge color="blue"   /> Permiso sin goce</span>
-        <span><Badge color="orange" /> Incapacidad (días 1-3, patrón)</span>
-        <span><Badge color="purple" /> Incapacidad (día 4+, IMSS)</span>
+        <span><Badge color="green"    /> Entrada registrada</span>
+        <span><Badge color="gold"     /> Salida registrada</span>
+        <span><Badge color="red"      /> Falta</span>
+        <span><Badge color="blue"     /> Permiso sin goce</span>
+        <span><Badge color="geekblue" /> Vacaciones</span>
+        <span><Badge color="orange"   /> Incapacidad (días 1-3, patrón)</span>
+        <span><Badge color="purple"   /> Incapacidad (día 4+, IMSS)</span>
+        <span><Badge color="default"  /> Corrección pendiente de aprobación</span>
       </div>
 
       {/* ── Modal: Agregar registro de asistencia ───────────────────────── */}
@@ -680,9 +853,9 @@ export function WeeklyReview() {
         </Form>
       </Modal>
 
-      {/* ── Modal: Registrar permiso/incapacidad ─────────────────────────── */}
+      {/* ── Modal: Registrar permiso/incapacidad/vacaciones (flujo normal) ── */}
       <Modal
-        title="Registrar Permiso o Incapacidad"
+        title="Registrar Permiso, Incapacidad o Vacaciones"
         open={specialModal}
         onCancel={() => {
           setSpecialModal(false);
@@ -715,7 +888,8 @@ export function WeeklyReview() {
                 specialForm.setFieldValue("partial_hours", null);
               }}
             >
-              <Radio.Button value="permiso_sin_goce">Permiso sin goce de sueldo</Radio.Button>
+              <Radio.Button value="permiso_sin_goce">Permiso sin goce</Radio.Button>
+              <Radio.Button value="vacaciones">Vacaciones</Radio.Button>
               <Radio.Button value="incapacidad">Incapacidad (IMSS)</Radio.Button>
             </Radio.Group>
           </Form.Item>
@@ -750,6 +924,8 @@ export function WeeklyReview() {
               placeholder={
                 specialEventType === "incapacidad"
                   ? "Diagnóstico o motivo de la incapacidad (opcional)"
+                  : specialEventType === "vacaciones"
+                  ? "Observaciones sobre el período vacacional (opcional)"
                   : "Motivo del permiso (opcional)"
               }
             />
@@ -775,6 +951,8 @@ export function WeeklyReview() {
           title={
             editSpecialModal.event.event_type === "incapacidad"
               ? `Incapacidad — ${editSpecialModal.event.employee_name}`
+              : editSpecialModal.event.event_type === "vacaciones"
+              ? `Vacaciones — ${editSpecialModal.event.employee_name}`
               : `Permiso sin goce — ${editSpecialModal.event.employee_name}`
           }
           open={editSpecialModal.open}
@@ -783,6 +961,41 @@ export function WeeklyReview() {
           destroyOnClose
           width={480}
         >
+          {/* Banner de corrección pendiente con acciones de aprobar/rechazar */}
+          {editSpecialModal.event.approval_status === "pending" && (
+            <Alert
+              type="warning"
+              showIcon
+              message="Corrección pendiente de aprobación"
+              description={`Registrado por: ${editSpecialModal.event.registered_by_name}${editSpecialModal.event.notes ? ` — "${editSpecialModal.event.notes}"` : ""}`}
+              style={{ marginBottom: 16 }}
+              action={
+                <Space direction="vertical" size={4}>
+                  <Popconfirm
+                    title="¿Aprobar esta corrección?"
+                    description="La falta será reemplazada por el evento indicado."
+                    okText="Aprobar"
+                    cancelText="Cancelar"
+                    onConfirm={() => handleApprove(editSpecialModal.event.id)}
+                  >
+                    <Button size="small" type="primary" icon={<CheckOutlined />} block>
+                      Aprobar
+                    </Button>
+                  </Popconfirm>
+                  <Button
+                    size="small"
+                    danger
+                    icon={<CloseOutlined />}
+                    block
+                    onClick={() => setRejectModal({ open: true, eventId: editSpecialModal.event.id })}
+                  >
+                    Rechazar
+                  </Button>
+                </Space>
+              }
+            />
+          )}
+
           <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
             <Text>
               <strong>Período:</strong>{" "}
@@ -860,6 +1073,122 @@ export function WeeklyReview() {
           </div>
         </Modal>
       )}
+
+      {/* ── Modal: Corregir falta → asignar permiso/vacaciones ─────────────── */}
+      <Modal
+        title={`Corregir falta — ${correctionModal?.employeeName ?? ""}`}
+        open={correctionModal?.open ?? false}
+        onCancel={() => { setCorrectionModal(null); correctionForm.resetFields(); setCorrectionEventType("permiso_sin_goce"); }}
+        footer={null}
+        destroyOnClose
+        width={520}
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message="Esta corrección reemplazará la falta y quedará pendiente de aprobación por un administrador."
+          style={{ marginBottom: 16 }}
+        />
+        {correctionModal && (
+          <div style={{
+            background: "#f5f5f5", borderRadius: 6, padding: "6px 12px",
+            marginBottom: 16, fontSize: 13,
+          }}>
+            <strong>Fecha:</strong> {dayjs(correctionModal.date).format("dddd DD/MM/YYYY")}
+          </div>
+        )}
+        <Form form={correctionForm} layout="vertical">
+          <Form.Item
+            name="event_type"
+            label="Tipo de corrección"
+            rules={[{ required: true }]}
+            initialValue="permiso_sin_goce"
+          >
+            <Radio.Group onChange={e => {
+              setCorrectionEventType(e.target.value);
+              correctionForm.setFieldValue("partial_hours", null);
+              correctionForm.setFieldValue("imss_folio", null);
+            }}>
+              <Space direction="vertical">
+                <Radio value="permiso_sin_goce">Permiso sin goce de sueldo</Radio>
+                <Radio value="vacaciones">Vacaciones</Radio>
+                <Radio value="incapacidad">Incapacidad (IMSS)</Radio>
+              </Space>
+            </Radio.Group>
+          </Form.Item>
+
+          <Form.Item
+            name="end_date"
+            label="Fecha fin (si el período va más allá de este día)"
+          >
+            <DatePicker
+              format="DD/MM/YYYY"
+              style={{ width: "100%" }}
+              placeholder={`${correctionModal?.date ?? ""} (solo este día)`}
+              disabledDate={d => !!d && d < dayjs(correctionModal?.date ?? "")}
+            />
+          </Form.Item>
+
+          {correctionEventType === "permiso_sin_goce" && (
+            <Form.Item name="partial_hours" label="¿Permiso de horas? (dejar en blanco si es día completo)">
+              <InputNumber min={0.5} max={12} step={0.5} placeholder="Ej: 4.0" style={{ width: "100%" }} />
+            </Form.Item>
+          )}
+
+          {correctionEventType === "incapacidad" && (
+            <Form.Item name="imss_folio" label="Folio IMSS (opcional)">
+              <Input placeholder="Número de folio del certificado de incapacidad" />
+            </Form.Item>
+          )}
+
+          <Form.Item
+            name="notes"
+            label="Justificación / Motivo"
+            rules={[{ required: true, message: "Indica el motivo de la corrección" }]}
+          >
+            <Input.TextArea
+              rows={2}
+              placeholder="Describe el motivo por el que se corrige esta falta..."
+            />
+          </Form.Item>
+        </Form>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+          <Button onClick={() => { setCorrectionModal(null); correctionForm.resetFields(); setCorrectionEventType("permiso_sin_goce"); }}>
+            Cancelar
+          </Button>
+          <Button type="primary" loading={submittingCorrection} onClick={handleCorrectionSubmit}>
+            Enviar para aprobación
+          </Button>
+        </div>
+      </Modal>
+
+      {/* ── Modal: Rechazar corrección ────────────────────────────────────── */}
+      {rejectModal && (
+        <Modal
+          title="Rechazar corrección"
+          open={rejectModal.open}
+          onCancel={() => { setRejectModal(null); rejectForm.resetFields(); }}
+          onOk={() => rejectForm.submit()}
+          okText="Rechazar"
+          okButtonProps={{ danger: true }}
+          cancelText="Cancelar"
+          destroyOnClose
+        >
+          <Form
+            form={rejectForm}
+            layout="vertical"
+            style={{ marginTop: 16 }}
+            onFinish={(values) => handleReject(rejectModal.eventId, values.notes)}
+          >
+            <Form.Item name="notes" label="Motivo del rechazo (opcional)">
+              <Input.TextArea
+                rows={2}
+                placeholder="Explica por qué se rechaza esta corrección (el empleado o supervisor podrá verlo)..."
+              />
+            </Form.Item>
+          </Form>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -873,38 +1202,48 @@ interface SpecialEventCellProps {
 
 function SpecialEventCell({ status, onEdit }: SpecialEventCellProps) {
   const { event, day_number_in_sequence, imss_responsibility } = status;
+  const isPending = event.approval_status === "pending";
 
-  if (event.event_type === "permiso_sin_goce") {
-    return (
-      <Space direction="vertical" size={2} align="center" style={{ width: "100%" }}>
-        <Tag color="blue" style={{ fontWeight: 600 }}>
-          {event.partial_hours ? `PERMISO ${event.partial_hours}h` : "PERMISO"}
+  const renderTag = () => {
+    if (event.event_type === "vacaciones") {
+      return (
+        <Tag
+          color={isPending ? "default" : "geekblue"}
+          style={{ fontWeight: 600, fontSize: 10 }}
+        >
+          {isPending ? "VAC · PENDIENTE" : "VACACIONES"}
         </Tag>
-        <Tooltip title="Ver / editar evento">
-          <Button
-            size="small" type="text"
-            icon={<EditOutlined style={{ fontSize: 11 }} />}
-            onClick={onEdit}
-            style={{ padding: "0 2px", height: "auto" }}
-          />
-        </Tooltip>
-      </Space>
-    );
-  }
+      );
+    }
 
-  // incapacidad
+    if (event.event_type === "permiso_sin_goce") {
+      return (
+        <Tag
+          color={isPending ? "default" : "blue"}
+          style={{ fontWeight: 600 }}
+        >
+          {isPending
+            ? "PERMISO · PENDIENTE"
+            : event.partial_hours
+            ? `PERMISO ${event.partial_hours}h`
+            : "PERMISO"}
+        </Tag>
+      );
+    }
+
+    // incapacidad
+    if (isPending) {
+      return <Tag color="default" style={{ fontWeight: 600, fontSize: 10 }}>INCAP · PENDIENTE</Tag>;
+    }
+    return imss_responsibility
+      ? <Tag color="purple" style={{ fontWeight: 600, fontSize: 10 }}>INCAP · Día {day_number_in_sequence} · IMSS</Tag>
+      : <Tag color="orange" style={{ fontWeight: 600, fontSize: 10 }}>INCAP · Día {day_number_in_sequence} · Patrón</Tag>;
+  };
+
   return (
     <Space direction="vertical" size={2} align="center" style={{ width: "100%" }}>
-      {imss_responsibility ? (
-        <Tag color="purple" style={{ fontWeight: 600, fontSize: 10 }}>
-          INCAP · Día {day_number_in_sequence} · IMSS
-        </Tag>
-      ) : (
-        <Tag color="orange" style={{ fontWeight: 600, fontSize: 10 }}>
-          INCAP · Día {day_number_in_sequence} · Patrón
-        </Tag>
-      )}
-      <Tooltip title="Ver / editar evento">
+      {renderTag()}
+      <Tooltip title={isPending ? "Ver / aprobar corrección pendiente" : "Ver / editar evento"}>
         <Button
           size="small" type="text"
           icon={<EditOutlined style={{ fontSize: 11 }} />}
@@ -919,27 +1258,39 @@ function SpecialEventCell({ status, onEdit }: SpecialEventCellProps) {
 // ── Celda de día (asistencia normal) ───────────────────────────────────────
 
 interface CellProps {
-  cell:         DayCell;
-  employeeId:   number;
-  employeeName: string;
-  date:         string;
-  onAdd:        () => void;
-  onAddSalida:  () => void;
-  onEdit:       (id: number, time: string, label: string) => void;
-  onDelete:     (id: number) => void;
+  cell:             DayCell;
+  employeeId:       number;
+  employeeName:     string;
+  date:             string;
+  onAdd:            () => void;
+  onAddSalida:      () => void;
+  onEdit:           (id: number, time: string, label: string) => void;
+  onDelete:         (id: number) => void;
+  onAssignSpecial?: () => void;
 }
 
-function CellRenderer({ cell, date, onAdd, onAddSalida, onEdit, onDelete }: CellProps) {
+function CellRenderer({ cell, date, onAdd, onAddSalida, onEdit, onDelete, onAssignSpecial }: CellProps) {
   const today  = dayjs().format("YYYY-MM-DD");
   const isPast = date < today;
 
   if (cell.source === "absent") {
     return (
-      <Space direction="vertical" size={4} align="center" style={{ width: "100%" }}>
+      <Space direction="vertical" size={3} align="center" style={{ width: "100%" }}>
         <Tag color="error" style={{ margin: 0 }}>FALTA</Tag>
         <Button size="small" type="dashed" icon={<PlusOutlined />} onClick={onAdd} style={{ fontSize: 10 }}>
-          Corregir
+          Corregir registro
         </Button>
+        {onAssignSpecial && (
+          <Button
+            size="small"
+            type="link"
+            icon={<MedicineBoxOutlined style={{ fontSize: 10 }} />}
+            onClick={onAssignSpecial}
+            style={{ fontSize: 10, padding: "0 2px", height: "auto" }}
+          >
+            Asignar permiso/vac.
+          </Button>
+        )}
       </Space>
     );
   }

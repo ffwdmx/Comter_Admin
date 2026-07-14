@@ -1,6 +1,6 @@
 import { EditButton, CreateButton } from "@refinedev/antd";
-import { Table, Space, Tag, Input, Select, Switch, Tooltip } from "antd";
-import { UserOutlined, SearchOutlined, StopOutlined } from "@ant-design/icons";
+import { Table, Space, Tag, Input, Select, Switch, Tooltip, Popconfirm, App, Button } from "antd";
+import { UserOutlined, SearchOutlined, StopOutlined, MobileOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import { axiosInstance } from "../../providers/dataProvider";
 
@@ -22,11 +22,22 @@ const reasonLabel: Record<string, string> = {
 };
 
 export const EmployeeList = () => {
+  const { message } = App.useApp();
   const [search, setSearch]         = useState("");
   const [roleFilter, setRole]       = useState<string | undefined>();
   const [showInactive, setInactive] = useState(false);
   const [data, setData]             = useState<any[]>([]);
   const [loading, setLoading]       = useState(false);
+
+  const resetDevice = async (id: number, name: string) => {
+    try {
+      await axiosInstance.patch(`/employees/${id}/reset-device`);
+      message.success(`Dispositivo liberado para ${name}. El empleado podrá iniciar sesión desde un nuevo celular.`);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      message.error(detail ?? "Error al liberar el dispositivo");
+    }
+  };
 
   const fetchEmployees = async (includeInactive: boolean) => {
     setLoading(true);
@@ -161,6 +172,20 @@ export const EmployeeList = () => {
           render={(_, record: any) => (
             <Space>
               <EditButton hideText size="small" recordItemId={record.id} />
+              {record.role === "employee" && (
+                <Popconfirm
+                  title="¿Liberar dispositivo?"
+                  description={`${record.name} podrá iniciar sesión desde un celular nuevo.`}
+                  onConfirm={() => resetDevice(record.id, record.name)}
+                  okText="Liberar"
+                  cancelText="Cancelar"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Tooltip title="Liberar dispositivo">
+                    <Button size="small" icon={<MobileOutlined />} />
+                  </Tooltip>
+                </Popconfirm>
+              )}
             </Space>
           )}
         />

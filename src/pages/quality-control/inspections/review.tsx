@@ -7,8 +7,9 @@ import {
 } from "antd";
 import {
   CheckCircleOutlined, CloseCircleOutlined, EyeOutlined,
-  SearchOutlined, ReloadOutlined, WarningOutlined, SendOutlined,
+  SearchOutlined, ReloadOutlined, WarningOutlined, SendOutlined, EditOutlined,
 } from "@ant-design/icons";
+import { InputNumber } from "antd";
 import dayjs from "dayjs";
 import { axiosInstance } from "../../../providers/dataProvider";
 
@@ -75,6 +76,12 @@ export const InspectionReview = () => {
   const [reviewForm]  = Form.useForm();
   const [reviewing,   setReviewing]  = useState(false);
 
+  // Edit drawer
+  const [editInsp,   setEditInsp]   = useState<QCInspection | null>(null);
+  const [editOpen,   setEditOpen]   = useState(false);
+  const [editForm]   = Form.useForm();
+  const [saving,     setSaving]     = useState(false);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -112,6 +119,39 @@ export const InspectionReview = () => {
     setReviewId(id);
     setReviewApprove(approve);
     reviewForm.resetFields();
+  };
+
+  const openEdit = (insp: QCInspection) => {
+    setEditInsp(insp);
+    editForm.setFieldsValue({
+      lot_number:         insp.lot_number ?? "",
+      total_inspected:    insp.total_inspected,
+      rejected_critical:  insp.rejected_critical,
+      rejected_major:     insp.rejected_major,
+      rejected_minor:     insp.rejected_minor,
+      reworked_qty:       insp.reworked_qty,
+      rework_passed:      insp.rework_passed,
+      observations:       insp.observations ?? "",
+      corrective_actions: insp.corrective_actions ?? "",
+    });
+    setEditOpen(true);
+  };
+
+  const submitEdit = async (values: Record<string, unknown>) => {
+    if (!editInsp) return;
+    setSaving(true);
+    try {
+      await axiosInstance.patch(`/qc/inspections/${editInsp.id}`, values);
+      message.success("Registro actualizado. Regresó a estado Pendiente de revisión.");
+      setEditOpen(false);
+      setEditInsp(null);
+      load();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      message.error(detail ?? "Error al guardar cambios");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const submitDraft = async (id: number) => {
@@ -282,6 +322,9 @@ export const InspectionReview = () => {
               <Tooltip title="Ver detalle">
                 <Button size="small" icon={<EyeOutlined />} onClick={() => openDetail(record)} />
               </Tooltip>
+              <Tooltip title="Editar registro">
+                <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)} />
+              </Tooltip>
               {record.status === "draft" && (
                 <Tooltip title="Enviar para revisión">
                   <Button
@@ -313,6 +356,81 @@ export const InspectionReview = () => {
           )}
         />
       </Table>
+
+      {/* Edit Drawer */}
+      <Drawer
+        open={editOpen}
+        onClose={() => { setEditOpen(false); setEditInsp(null); }}
+        title={`Editar registro — ${editInsp?.project_name ?? ""}`}
+        width={520}
+        footer={
+          <Space style={{ justifyContent: "flex-end", width: "100%", display: "flex" }}>
+            <Button onClick={() => { setEditOpen(false); setEditInsp(null); }}>Cancelar</Button>
+            <Button type="primary" loading={saving} onClick={() => editForm.submit()}>
+              Guardar cambios
+            </Button>
+          </Space>
+        }
+      >
+        {editInsp && (
+          <>
+            {(editInsp.status === "approved" || editInsp.status === "rejected") && (
+              <div style={{
+                background: "#FFF3CD", border: "1px solid #FBBF24", borderRadius: 6,
+                padding: "8px 12px", marginBottom: 16, fontSize: 13, color: "#92400E",
+              }}>
+                Al guardar, el registro regresará a <strong>Pendiente de revisión</strong> para ser aprobado nuevamente.
+              </div>
+            )}
+            <Form form={editForm} layout="vertical" onFinish={submitEdit}>
+              <Form.Item label="Número de lote" name="lot_number">
+                <Input placeholder="Ej. L-2025-001" />
+              </Form.Item>
+              <Divider orientation="left" plain style={{ fontSize: 13 }}>Cantidades</Divider>
+              <Row gutter={12}>
+                <Col span={12}>
+                  <Form.Item label="Total inspeccionado" name="total_inspected"
+                    rules={[{ required: true, message: "Requerido" }]}>
+                    <InputNumber min={0} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Rechazados críticos" name="rejected_critical">
+                    <InputNumber min={0} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Rechazados mayores" name="rejected_major">
+                    <InputNumber min={0} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Rechazados menores" name="rejected_minor">
+                    <InputNumber min={0} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Retrabajado" name="reworked_qty">
+                    <InputNumber min={0} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item label="Retr. que pasó" name="rework_passed">
+                    <InputNumber min={0} style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Divider orientation="left" plain style={{ fontSize: 13 }}>Notas</Divider>
+              <Form.Item label="Observaciones" name="observations">
+                <Input.TextArea rows={3} />
+              </Form.Item>
+              <Form.Item label="Acciones correctivas" name="corrective_actions">
+                <Input.TextArea rows={3} />
+              </Form.Item>
+            </Form>
+          </>
+        )}
+      </Drawer>
 
       {/* Review Modal */}
       <Modal

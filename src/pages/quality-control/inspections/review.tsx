@@ -7,7 +7,7 @@ import {
 } from "antd";
 import {
   CheckCircleOutlined, CloseCircleOutlined, EyeOutlined,
-  SearchOutlined, ReloadOutlined, WarningOutlined,
+  SearchOutlined, ReloadOutlined, WarningOutlined, SendOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { axiosInstance } from "../../../providers/dataProvider";
@@ -112,6 +112,17 @@ export const InspectionReview = () => {
     setReviewId(id);
     setReviewApprove(approve);
     reviewForm.resetFields();
+  };
+
+  const submitDraft = async (id: number) => {
+    try {
+      await axiosInstance.patch(`/qc/inspections/${id}/submit`);
+      message.success("Registro enviado para revisión");
+      load();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      message.error(detail ?? "Error al enviar");
+    }
   };
 
   const submitReview = async (values: { comment?: string }) => {
@@ -271,7 +282,16 @@ export const InspectionReview = () => {
               <Tooltip title="Ver detalle">
                 <Button size="small" icon={<EyeOutlined />} onClick={() => openDetail(record)} />
               </Tooltip>
-              {record.status === "submitted" && (
+              {record.status === "draft" && (
+                <Tooltip title="Enviar para revisión">
+                  <Button
+                    size="small"
+                    icon={<SendOutlined />}
+                    onClick={() => submitDraft(record.id)}
+                  />
+                </Tooltip>
+              )}
+              {(record.status === "submitted" || record.status === "draft") && (
                 <>
                   <Tooltip title="Aprobar">
                     <Button

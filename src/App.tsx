@@ -11,6 +11,7 @@ import {
   ClockCircleOutlined,
   AlertOutlined,
   CalendarOutlined,
+  SwapOutlined,
   ExperimentOutlined,
   AuditOutlined,
   BugOutlined,
@@ -37,6 +38,7 @@ import { QCProjectDetail }          from "./pages/quality-control/projects/detai
 import { InspectionReview }         from "./pages/quality-control/inspections/review";
 import { DefectTypeList }           from "./pages/quality-control/defect-types/list";
 import { ReportGenerator }          from "./pages/quality-control/reports/generator";
+import { ExtraShiftRequests }       from "./pages/attendance/ExtraShiftRequests";
 
 const Dashboard = () => (
   <div style={{ padding: 24 }}>
@@ -102,6 +104,11 @@ export default function App() {
                 name: "attendance",
                 list: "/attendance",
                 meta: { label: "Asistencia Semanal", icon: <CalendarOutlined /> },
+              },
+              {
+                name: "extra-shifts",
+                list: "/extra-shifts",
+                meta: { label: "Segundos Turnos", icon: <SwapOutlined /> },
               },
               {
                 name: "qc-projects",
@@ -185,8 +192,9 @@ export default function App() {
                   <Route path="edit/:id" element={<ShiftTypeEdit />} />
                 </Route>
 
-                <Route path="/supervisor" element={<SupervisorDashboard />} />
-                <Route path="/attendance" element={<WeeklyReview />} />
+                <Route path="/supervisor"   element={<SupervisorDashboard />} />
+                <Route path="/attendance"   element={<WeeklyReview />} />
+                <Route path="/extra-shifts" element={<ExtraShiftRequests />} />
 
                 <Route path="/quality-control/projects">
                   <Route index              element={<QCProjectList />}   />

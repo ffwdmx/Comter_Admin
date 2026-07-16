@@ -3,14 +3,14 @@ import { useState, useEffect } from "react";
 import {
   Table, Tag, Typography, Button, Space, Select, DatePicker, Input,
   Tooltip, App, Modal, Form, Drawer, Descriptions, Statistic,
-  Row, Col, Divider,
+  Row, Col, Divider, InputNumber,
 } from "antd";
 import {
   CheckCircleOutlined, CloseCircleOutlined, EyeOutlined,
-  SearchOutlined, ReloadOutlined, WarningOutlined, SendOutlined, EditOutlined,
+  SearchOutlined, ReloadOutlined, WarningOutlined, SendOutlined,
+  EditOutlined, PlusOutlined,
 } from "@ant-design/icons";
-import { InputNumber } from "antd";
-import dayjs from "dayjs";
+import dayjs, { Dayjs } from "dayjs";
 import { axiosInstance } from "../../../providers/dataProvider";
 
 interface QCInspection {
@@ -32,6 +32,14 @@ interface DefectRecord {
 }
 
 interface QCProject { id: number; name: string; }
+
+interface QCDefectType {
+  id: number; code: string; name: string;
+  severity_default: string; category: string;
+  project_id: number | null; is_active: boolean;
+}
+
+interface Employee { id: number; name: string; employee_no: string; }
 
 const SHIFT_LABEL: Record<string, string> = {
   morning: "Mañana", afternoon: "Tarde", night: "Noche",
@@ -66,21 +74,30 @@ export const InspectionReview = () => {
   const [search,        setSearch]          = useState("");
 
   // Detail drawer
-  const [detailInsp, setDetailInsp] = useState<QCInspection | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailInsp,    setDetailInsp]    = useState<QCInspection | null>(null);
+  const [detailOpen,    setDetailOpen]    = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
   // Review modal
-  const [reviewId,   setReviewId]   = useState<number | null>(null);
+  const [reviewId,      setReviewId]      = useState<number | null>(null);
   const [reviewApprove, setReviewApprove] = useState(true);
   const [reviewForm]  = Form.useForm();
   const [reviewing,   setReviewing]  = useState(false);
 
   // Edit drawer
-  const [editInsp,   setEditInsp]   = useState<QCInspection | null>(null);
-  const [editOpen,   setEditOpen]   = useState(false);
-  const [editForm]   = Form.useForm();
-  const [saving,     setSaving]     = useState(false);
+  const [editInsp, setEditInsp] = useState<QCInspection | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm] = Form.useForm();
+  const [saving,   setSaving]   = useState(false);
+
+  // ── Create drawer ──────────────────────────────────────────────────────
+  const [createOpen,     setCreateOpen]     = useState(false);
+  const [createForm]   = Form.useForm();
+  const [creating,       setCreating]       = useState(false);
+  const [defectTypes,    setDefectTypes]    = useState<QCDefectType[]>([]);
+  const [loadingDefs,    setLoadingDefs]    = useState(false);
+  const [employees,      setEmployees]      = useState<Employee[]>([]);
+  const [selectedProjId, setSelectedProjId] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -103,6 +120,112 @@ export const InspectionReview = () => {
   };
 
   useEffect(() => { load(); }, [projectFilter, statusFilter, dateFrom, dateTo]);
+
+  // Cargar empleados una vez al abrir el drawer de creación
+  const openCreate = async () => {
+    createForm.resetFields();
+    setDefectTypes([]);
+    setSelectedProjId(null);
+    setCreateOpen(true);
+    if (employees.length === 0) {
+      try {
+        const { data } = await axiosInstance.get("/employees", { params: { limit: 300 } });
+        setEmployees(Array.isArray(data) ? data : (data?.items ?? []));
+      } catch {
+        // no crítico — el selector mostrará lista vacía
+      }
+    }
+  };
+
+  const onProjectSelect = async (projectId: number) => {
+    setSelectedProjId(projectId);
+    setDefectTypes([]);
+    // Limpiar las cantidades de defectos previas
+    const fields: Record<string, number> = {};
+    defectTypes.forEach((dt) => { fields[`defect_${dt.id}`] = 0; });
+    createForm.setFieldsValue(fields);
+
+    setLoadingDefs(true);
+    try {
+      const { data } = await axiosInstance.get("/qc/defect-types/", {
+        params: { project_id: projectId },
+      });
+      setDefectTypes(Array.isArray(data) ? data.filter((d: QCDefectType) => d.is_active) : []);
+    } catch {
+      message.error("No se pudieron cargar los tipos de defecto del proyecto.");
+    } finally {
+      setLoadingDefs(false);
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!selectedProjId) { message.warning("Selecciona un proyecto."); return; }
+    let values: Record<string, unknown>;
+    try {
+      values = await createForm.validateFields();
+    } catch {
+      return;
+    }
+
+    // Calcular rechazados por severidad a partir de los defectos capturados
+    let rejCritical = 0, rejMajor = 0, rejMinor = 0;
+    const defectsToAdd: { defect_type_id: number; quantity: number; severity: string }[] = [];
+
+    for (const dt of defectTypes) {
+      const qty = Number(values[`defect_${dt.id}`] ?? 0);
+      if (qty > 0) {
+        defectsToAdd.push({ defect_type_id: dt.id, quantity: qty, severity: dt.severity_default });
+        if (dt.severity_default === "critical") rejCritical += qty;
+        else if (dt.severity_default === "major") rejMajor += qty;
+        else rejMinor += qty;
+      }
+    }
+
+    const totalInsp = Number(values.total_inspected ?? 0);
+    if (totalInsp <= 0) { message.warning("El total inspeccionado debe ser mayor a 0."); return; }
+    if (rejCritical + rejMajor + rejMinor > totalInsp) {
+      message.warning("La suma de defectos supera el total inspeccionado.");
+      return;
+    }
+
+    const inspDate = (values.inspection_date as Dayjs).format("YYYY-MM-DD");
+
+    setCreating(true);
+    try {
+      // 1. Crear la inspección
+      const { data: newInsp } = await axiosInstance.post("/qc/inspections/", {
+        project_id:        selectedProjId,
+        employee_id:       values.employee_id ?? null,
+        inspection_date:   inspDate,
+        shift:             values.shift,
+        lot_number:        values.lot_number || null,
+        total_inspected:   totalInsp,
+        rejected_critical: rejCritical,
+        rejected_major:    rejMajor,
+        rejected_minor:    rejMinor,
+        observations:      values.observations || null,
+      });
+
+      // 2. Registrar defectos individuales
+      for (const d of defectsToAdd) {
+        await axiosInstance.post(`/qc/inspections/${newInsp.id}/defects`, d);
+      }
+
+      message.success("Registro de inspección creado correctamente.");
+      setCreateOpen(false);
+      createForm.resetFields();
+      setDefectTypes([]);
+      setSelectedProjId(null);
+      load();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      message.error(detail ?? "Error al crear el registro.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // ── Resto de handlers ──────────────────────────────────────────────────
 
   const openDetail = async (insp: QCInspection) => {
     setDetailOpen(true);
@@ -198,9 +321,7 @@ export const InspectionReview = () => {
 
   return (
     <div>
-      <div
-        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
           <Typography.Title level={4} style={{ margin: 0 }}>
             Revisión de Inspecciones QC
@@ -211,9 +332,18 @@ export const InspectionReview = () => {
             </Typography.Text>
           )}
         </div>
-        <Tooltip title="Recargar">
-          <Button icon={<ReloadOutlined />} onClick={load} loading={loading} />
-        </Tooltip>
+        <Space>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={openCreate}
+          >
+            Nuevo Registro
+          </Button>
+          <Tooltip title="Recargar">
+            <Button icon={<ReloadOutlined />} onClick={load} loading={loading} />
+          </Tooltip>
+        </Space>
       </div>
 
       {/* Filters */}
@@ -270,15 +400,13 @@ export const InspectionReview = () => {
         rowKey="id"
         pagination={{ pageSize: 20 }}
         size="small"
-        rowClassName={(r: QCInspection) => r.status === "submitted" ? "" : ""}
+        rowClassName={(_: QCInspection) => ""}
       >
         <Table.Column
           title="Proyecto"
           dataIndex="project_name"
           render={(v, record: QCInspection) => (
-            <div>
-              <Typography.Text strong>{v ?? `ID ${record.project_id}`}</Typography.Text>
-            </div>
+            <Typography.Text strong>{v ?? `ID ${record.project_id}`}</Typography.Text>
           )}
         />
         <Table.Column title="Inspector"  dataIndex="employee_name" render={(v) => v ?? "—"} />
@@ -287,11 +415,7 @@ export const InspectionReview = () => {
           dataIndex="inspection_date"
           render={(v) => new Date(v).toLocaleDateString("es-MX")}
         />
-        <Table.Column
-          title="Turno"
-          dataIndex="shift"
-          render={(v) => SHIFT_LABEL[v] ?? v}
-        />
+        <Table.Column title="Turno" dataIndex="shift" render={(v) => SHIFT_LABEL[v] ?? v} />
         <Table.Column title="Insp." dataIndex="total_inspected" align="center" />
         <Table.Column title="Rech." dataIndex="total_rejected"  align="center" />
         <Table.Column
@@ -357,7 +481,160 @@ export const InspectionReview = () => {
         />
       </Table>
 
-      {/* Edit Drawer */}
+      {/* ── Drawer: Nuevo Registro ─────────────────────────────────────────── */}
+      <Drawer
+        open={createOpen}
+        onClose={() => { setCreateOpen(false); createForm.resetFields(); setDefectTypes([]); setSelectedProjId(null); }}
+        title="Nuevo Registro de Inspección QC"
+        width={560}
+        footer={
+          <Space style={{ justifyContent: "flex-end", width: "100%", display: "flex" }}>
+            <Button onClick={() => { setCreateOpen(false); createForm.resetFields(); setDefectTypes([]); setSelectedProjId(null); }}>
+              Cancelar
+            </Button>
+            <Button type="primary" loading={creating} onClick={handleCreate}>
+              Crear Registro
+            </Button>
+          </Space>
+        }
+      >
+        <Form form={createForm} layout="vertical">
+          {/* Proyecto */}
+          <Form.Item
+            label="Proyecto"
+            name="project_id"
+            rules={[{ required: true, message: "Selecciona un proyecto" }]}
+          >
+            <Select
+              placeholder="Selecciona el proyecto..."
+              showSearch
+              filterOption={(input, option) =>
+                (String(option?.label ?? "")).toLowerCase().includes(input.toLowerCase())
+              }
+              options={projects.map((p) => ({ label: p.name, value: p.id }))}
+              onChange={(v) => { createForm.setFieldValue("project_id", v); onProjectSelect(v); }}
+            />
+          </Form.Item>
+
+          {/* Inspector */}
+          <Form.Item label="Inspector" name="employee_id">
+            <Select
+              placeholder="Inspector (opcional — por defecto tú mismo)"
+              showSearch
+              allowClear
+              filterOption={(input, option) =>
+                (String(option?.label ?? "")).toLowerCase().includes(input.toLowerCase())
+              }
+              options={employees.map((e) => ({
+                label: `${e.employee_no} — ${e.name}`,
+                value: e.id,
+              }))}
+            />
+          </Form.Item>
+
+          {/* Fecha y Turno */}
+          <Row gutter={12}>
+            <Col span={13}>
+              <Form.Item
+                label="Fecha de inspección"
+                name="inspection_date"
+                rules={[{ required: true, message: "Selecciona la fecha" }]}
+                initialValue={dayjs()}
+              >
+                <DatePicker format="DD/MM/YYYY" style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+            <Col span={11}>
+              <Form.Item
+                label="Turno"
+                name="shift"
+                rules={[{ required: true, message: "Selecciona el turno" }]}
+              >
+                <Select
+                  options={[
+                    { label: "Mañana",  value: "morning"   },
+                    { label: "Tarde",   value: "afternoon" },
+                    { label: "Noche",   value: "night"     },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {/* Lote */}
+          <Form.Item label="Número de lote" name="lot_number">
+            <Input placeholder="Ej. L-2025-001 (opcional)" />
+          </Form.Item>
+
+          {/* Total inspeccionado */}
+          <Form.Item
+            label="Total inspeccionado"
+            name="total_inspected"
+            rules={[{ required: true, message: "Requerido" }]}
+          >
+            <InputNumber min={1} style={{ width: "100%" }} placeholder="Piezas inspeccionadas" />
+          </Form.Item>
+
+          {/* Defectos por tipo */}
+          {selectedProjId && (
+            <>
+              <Divider orientation="left" plain style={{ fontSize: 13 }}>
+                Defectos capturados
+              </Divider>
+
+              {loadingDefs ? (
+                <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                  Cargando tipos de defecto...
+                </Typography.Text>
+              ) : defectTypes.length === 0 ? (
+                <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                  Sin tipos de defecto configurados para este proyecto.
+                </Typography.Text>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {defectTypes.map((dt) => (
+                    <div
+                      key={dt.id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        background: "#fafafa", borderRadius: 6,
+                        padding: "6px 10px", border: "1px solid #f0f0f0",
+                      }}
+                    >
+                      <Tag
+                        color={SEV_COLOR[dt.severity_default]}
+                        style={{ minWidth: 60, textAlign: "center", fontSize: 11 }}
+                      >
+                        {SEV_LABEL[dt.severity_default]}
+                      </Tag>
+                      <Typography.Text style={{ flex: 1, fontSize: 13 }}>
+                        <span style={{ fontWeight: 600 }}>{dt.code}</span> — {dt.name}
+                      </Typography.Text>
+                      <Form.Item
+                        name={`defect_${dt.id}`}
+                        initialValue={0}
+                        style={{ margin: 0, width: 80 }}
+                      >
+                        <InputNumber min={0} style={{ width: "100%" }} size="small" />
+                      </Form.Item>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Observaciones */}
+          <Divider orientation="left" plain style={{ fontSize: 13, marginTop: 20 }}>
+            Notas
+          </Divider>
+          <Form.Item label="Observaciones" name="observations">
+            <Input.TextArea rows={3} placeholder="Observaciones generales (opcional)" />
+          </Form.Item>
+        </Form>
+      </Drawer>
+
+      {/* ── Drawer: Editar Registro ───────────────────────────────────────── */}
       <Drawer
         open={editOpen}
         onClose={() => { setEditOpen(false); setEditInsp(null); }}
@@ -432,7 +709,7 @@ export const InspectionReview = () => {
         )}
       </Drawer>
 
-      {/* Review Modal */}
+      {/* ── Modal: Aprobar / Rechazar ─────────────────────────────────────── */}
       <Modal
         open={reviewId != null}
         title={reviewApprove ? "Aprobar registro" : "Rechazar registro"}
@@ -452,7 +729,7 @@ export const InspectionReview = () => {
         </Form>
       </Modal>
 
-      {/* Detail Drawer */}
+      {/* ── Drawer: Detalle del registro ─────────────────────────────────── */}
       <Drawer
         open={detailOpen}
         onClose={() => { setDetailOpen(false); setDetailInsp(null); }}
@@ -463,7 +740,7 @@ export const InspectionReview = () => {
         {detailInsp && (
           <>
             <Descriptions bordered column={2} size="small">
-              <Descriptions.Item label="Proyecto" span={2}>{detailInsp.project_name}</Descriptions.Item>
+              <Descriptions.Item label="Proyecto"  span={2}>{detailInsp.project_name}</Descriptions.Item>
               <Descriptions.Item label="Inspector">{detailInsp.employee_name}</Descriptions.Item>
               <Descriptions.Item label="Fecha">{new Date(detailInsp.inspection_date).toLocaleDateString("es-MX")}</Descriptions.Item>
               <Descriptions.Item label="Turno">{SHIFT_LABEL[detailInsp.shift] ?? detailInsp.shift}</Descriptions.Item>
@@ -476,10 +753,10 @@ export const InspectionReview = () => {
             <Divider>KPIs</Divider>
             <Row gutter={12}>
               {[
-                { t: "FPY",           v: detailInsp.fpy,           s: "%", c: YIELD_COLOR[detailInsp.yield_status ?? ""] ?? "#1B3A6B" },
-                { t: "Overall Yield", v: detailInsp.overall_yield,  s: "%", c: "#2E7D32" },
-                { t: "DPMO",          v: detailInsp.dpmo,           s: "",  c: "#6A1B9A" },
-                { t: "PPM",           v: detailInsp.ppm,            s: "",  c: "#00838F" },
+                { t: "FPY",           v: detailInsp.fpy,          s: "%", c: YIELD_COLOR[detailInsp.yield_status ?? ""] ?? "#1B3A6B" },
+                { t: "Overall Yield", v: detailInsp.overall_yield, s: "%", c: "#2E7D32" },
+                { t: "DPMO",          v: detailInsp.dpmo,          s: "",  c: "#6A1B9A" },
+                { t: "PPM",           v: detailInsp.ppm,           s: "",  c: "#00838F" },
               ].map(({ t, v, s, c }) => (
                 <Col span={6} key={t}>
                   <Statistic
@@ -499,7 +776,7 @@ export const InspectionReview = () => {
               <Descriptions.Item label="Críticos">{detailInsp.rejected_critical}</Descriptions.Item>
               <Descriptions.Item label="Mayores">{detailInsp.rejected_major}</Descriptions.Item>
               <Descriptions.Item label="Menores">{detailInsp.rejected_minor}</Descriptions.Item>
-              <Descriptions.Item label="Retrабajado">{detailInsp.reworked_qty}</Descriptions.Item>
+              <Descriptions.Item label="Retrabajado">{detailInsp.reworked_qty}</Descriptions.Item>
             </Descriptions>
 
             {detailInsp.observations && (

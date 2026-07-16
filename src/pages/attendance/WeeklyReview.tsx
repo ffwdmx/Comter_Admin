@@ -277,8 +277,22 @@ export function WeeklyReview() {
     try {
       const values = await addForm.validateFields();
       const time: Dayjs = values.hora;
+
+      // Para turno nocturno: si shiftEnd < shiftStart (ej. "06:30" < "22:00")
+      // y el tipo es check_out, el checkout ocurre la madrugada del día siguiente.
+      let recordDate = addModal.date;
+      if (
+        values.type === "check_out" &&
+        addModal.shiftStart &&
+        addModal.shiftEnd &&
+        addModal.shiftEnd < addModal.shiftStart &&
+        time.hour() < 12
+      ) {
+        recordDate = dayjs(addModal.date).add(1, "day").format("YYYY-MM-DD");
+      }
+
       const ts = dayjs.tz(
-        `${addModal.date} ${time.format("HH:mm")}`,
+        `${recordDate} ${time.format("HH:mm")}`,
         "YYYY-MM-DD HH:mm",
         TZ,
       ).utc().toISOString();
@@ -778,6 +792,18 @@ export function WeeklyReview() {
               <strong>Turno asignado:</strong> {addModal.shiftName}
               {addModal.shiftStart && addModal.shiftEnd &&
                 ` · ${addModal.shiftStart} – ${addModal.shiftEnd}`}
+            </Text>
+          </div>
+        )}
+        {addModal?.forceType === "check_out" &&
+          addModal.shiftStart && addModal.shiftEnd &&
+          addModal.shiftEnd < addModal.shiftStart && (
+          <div style={{
+            background: "#fff7e6", border: "1px solid #ffd591",
+            borderRadius: 8, padding: "8px 14px", marginBottom: 16,
+          }}>
+            <Text style={{ fontSize: 12 }}>
+              <strong>Turno nocturno:</strong> la salida se guardará con fecha del día siguiente ({dayjs(addModal.date).add(1, "day").format("DD/MM/YYYY")}).
             </Text>
           </div>
         )}

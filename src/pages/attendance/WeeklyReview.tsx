@@ -281,8 +281,9 @@ export function WeeklyReview() {
       // Para turno nocturno: si shiftEnd < shiftStart (ej. "06:30" < "22:00")
       // y el tipo es check_out, el checkout ocurre la madrugada del día siguiente.
       let recordDate = addModal.date;
+      const isCheckOut = values.type === "check_out" || addModal.forceType === "check_out";
       if (
-        values.type === "check_out" &&
+        isCheckOut &&
         addModal.shiftStart &&
         addModal.shiftEnd &&
         addModal.shiftEnd < addModal.shiftStart &&

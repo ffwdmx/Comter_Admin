@@ -413,7 +413,7 @@ export const InspectionReview = () => {
         <Table.Column
           title="Fecha"
           dataIndex="inspection_date"
-          render={(v) => new Date(v).toLocaleDateString("es-MX")}
+          render={(v) => dayjs(v, "YYYY-MM-DD").format("DD/MM/YYYY")}
         />
         <Table.Column title="Turno" dataIndex="shift" render={(v) => SHIFT_LABEL[v] ?? v} />
         <Table.Column title="Insp." dataIndex="total_inspected" align="center" />
@@ -742,7 +742,7 @@ export const InspectionReview = () => {
             <Descriptions bordered column={2} size="small">
               <Descriptions.Item label="Proyecto"  span={2}>{detailInsp.project_name}</Descriptions.Item>
               <Descriptions.Item label="Inspector">{detailInsp.employee_name}</Descriptions.Item>
-              <Descriptions.Item label="Fecha">{new Date(detailInsp.inspection_date).toLocaleDateString("es-MX")}</Descriptions.Item>
+              <Descriptions.Item label="Fecha">{dayjs(detailInsp.inspection_date, "YYYY-MM-DD").format("DD/MM/YYYY")}</Descriptions.Item>
               <Descriptions.Item label="Turno">{SHIFT_LABEL[detailInsp.shift] ?? detailInsp.shift}</Descriptions.Item>
               <Descriptions.Item label="Lote">{detailInsp.lot_number ?? "—"}</Descriptions.Item>
               <Descriptions.Item label="Estado" span={2}>

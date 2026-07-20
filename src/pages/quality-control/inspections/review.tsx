@@ -247,6 +247,8 @@ export const InspectionReview = () => {
   const openEdit = (insp: QCInspection) => {
     setEditInsp(insp);
     editForm.setFieldsValue({
+      inspection_date:    dayjs(insp.inspection_date, "YYYY-MM-DD"),
+      shift:              insp.shift,
       lot_number:         insp.lot_number ?? "",
       total_inspected:    insp.total_inspected,
       rejected_critical:  insp.rejected_critical,
@@ -263,8 +265,15 @@ export const InspectionReview = () => {
   const submitEdit = async (values: Record<string, unknown>) => {
     if (!editInsp) return;
     setSaving(true);
+    // Serializar inspection_date de dayjs a string YYYY-MM-DD
+    const payload = {
+      ...values,
+      ...(values.inspection_date
+        ? { inspection_date: (values.inspection_date as Dayjs).format("YYYY-MM-DD") }
+        : {}),
+    };
     try {
-      await axiosInstance.patch(`/qc/inspections/${editInsp.id}`, values);
+      await axiosInstance.patch(`/qc/inspections/${editInsp.id}`, payload);
       message.success("Registro actualizado. Regresó a estado Pendiente de revisión.");
       setEditOpen(false);
       setEditInsp(null);
@@ -660,6 +669,33 @@ export const InspectionReview = () => {
               </div>
             )}
             <Form form={editForm} layout="vertical" onFinish={submitEdit}>
+              <Divider orientation="left" plain style={{ fontSize: 13 }}>Fecha y turno</Divider>
+              <Row gutter={12}>
+                <Col span={14}>
+                  <Form.Item
+                    label="Fecha de inspección"
+                    name="inspection_date"
+                    rules={[{ required: true, message: "Requerido" }]}
+                  >
+                    <DatePicker format="DD/MM/YYYY" style={{ width: "100%" }} />
+                  </Form.Item>
+                </Col>
+                <Col span={10}>
+                  <Form.Item
+                    label="Turno"
+                    name="shift"
+                    rules={[{ required: true, message: "Requerido" }]}
+                  >
+                    <Select
+                      options={[
+                        { label: "Mañana",  value: "morning"   },
+                        { label: "Tarde",   value: "afternoon" },
+                        { label: "Noche",   value: "night"     },
+                      ]}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
               <Form.Item label="Número de lote" name="lot_number">
                 <Input placeholder="Ej. L-2025-001" />
               </Form.Item>

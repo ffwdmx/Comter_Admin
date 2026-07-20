@@ -2,6 +2,7 @@ import { Create, Edit, useForm, useSelect } from "@refinedev/antd";
 import {
   Form, Input, Select, Table, Tag, Button, Space,
   DatePicker, Typography, Divider, message, Modal, Row, Col,
+  Checkbox, InputNumber, Alert,
 } from "antd";
 import {
   HistoryOutlined, SwapOutlined, EnvironmentOutlined,
@@ -324,10 +325,18 @@ const EmployeeFormFields = ({
   });
 
   const form = Form.useFormInstance();
-  const curpValue  = Form.useWatch("curp",  form);
-  const rfcValue   = Form.useWatch("rfc",   form);
+  const curpValue         = Form.useWatch("curp",                form);
+  const rfcValue          = Form.useWatch("rfc",                 form);
+  const sdbValue          = Form.useWatch("salario_diario_base", form);
+  const factorValue       = Form.useWatch("factor_integracion",  form);
+  const tieneInfonavit    = Form.useWatch("tiene_infonavit",     form);
   // Detecta cuándo Refine termina de cargar los datos del servidor en edit mode
   const calleWatch = Form.useWatch("calle", form);
+
+  // SDI calculado en tiempo real
+  const sdi = sdbValue && factorValue
+    ? (sdbValue * factorValue).toFixed(2)
+    : null;
 
   const [addressData, setAddressData] = useState<AddressData>({});
 
@@ -537,6 +546,115 @@ const EmployeeFormFields = ({
           </Form.Item>
         </Col>
       </Row>
+
+      {/* ── Datos laborales adicionales ───────────────────────────────── */}
+      <Row gutter={16}>
+        <Col span={8}>
+          <Form.Item label="Fecha de ingreso" name="fecha_ingreso"
+            getValueProps={(v) => ({ value: v ? dayjs(v) : undefined })}
+            getValueFromEvent={(d) => d ? d.format("YYYY-MM-DD") : null}
+          >
+            <DatePicker style={{ width: "100%" }} format="DD/MM/YYYY" placeholder="dd/mm/aaaa" />
+          </Form.Item>
+        </Col>
+        <Col span={8}>
+          <Form.Item
+            label="Salario Diario Base (SDB)"
+            name="salario_diario_base"
+            rules={[{ type: "number", min: 0, message: "Debe ser positivo" }]}
+          >
+            <InputNumber
+              style={{ width: "100%" }}
+              prefix="$"
+              precision={2}
+              min={0}
+              placeholder="0.00"
+            />
+          </Form.Item>
+        </Col>
+        <Col span={8}>
+          <Form.Item
+            label="Factor de integración"
+            name="factor_integracion"
+            initialValue={1.0452}
+            tooltip="SDI = SDB × Factor. Mínimo IMSS: 1.0452"
+            rules={[{ type: "number", min: 1, message: "El factor debe ser ≥ 1" }]}
+          >
+            <InputNumber
+              style={{ width: "100%" }}
+              precision={4}
+              min={1}
+              step={0.01}
+              placeholder="1.0452"
+            />
+          </Form.Item>
+        </Col>
+      </Row>
+
+      {/* SDI calculado (solo lectura) */}
+      {sdi && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={
+            <span>
+              <strong>Salario Diario Integrado (SDI):</strong>{" "}
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#1677ff" }}>
+                ${parseFloat(sdi).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+              </span>
+              <span style={{ color: "#888", marginLeft: 8, fontSize: 12 }}>
+                = SDB ${sdbValue?.toFixed(2)} × {factorValue}
+              </span>
+            </span>
+          }
+        />
+      )}
+
+      {/* ── Infonavit ──────────────────────────────────────────────────── */}
+      <Form.Item name="tiene_infonavit" valuePropName="checked" style={{ marginBottom: 8 }}>
+        <Checkbox><strong>Empleado tiene crédito Infonavit</strong></Checkbox>
+      </Form.Item>
+
+      {tieneInfonavit && (
+        <Row gutter={16} style={{ marginBottom: 8 }}>
+          <Col span={12}>
+            <Form.Item
+              label="# Folio Infonavit"
+              name="folio_infonavit"
+              rules={[{ required: tieneInfonavit, message: "Requerido si tiene Infonavit" }]}
+            >
+              <Input placeholder="Ej: 1234567890" maxLength={30} />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              label="Monto a deducir (pesos / bimestre)"
+              name="monto_infonavit"
+              rules={[
+                { required: tieneInfonavit, message: "Requerido si tiene Infonavit" },
+                { type: "number", min: 0, message: "Debe ser positivo" },
+              ]}
+            >
+              <InputNumber
+                style={{ width: "100%" }}
+                prefix="$"
+                precision={2}
+                min={0}
+                placeholder="0.00"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+      )}
+
+      {/* Campos ocultos para que Infonavit llegue siempre en el payload */}
+      {!tieneInfonavit && (
+        <>
+          <Form.Item name="folio_infonavit" hidden><Input /></Form.Item>
+          <Form.Item name="monto_infonavit" hidden><InputNumber /></Form.Item>
+        </>
+      )}
 
       {/* Campos de domicilio — ocultos en ambos modos para que el form
           los incluya siempre en el payload de create/update */}

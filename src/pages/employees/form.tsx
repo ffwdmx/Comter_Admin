@@ -2,12 +2,12 @@ import { Create, Edit, useForm, useSelect } from "@refinedev/antd";
 import {
   Form, Input, Select, Table, Tag, Button, Space,
   DatePicker, Typography, Divider, message, Modal, Row, Col,
-  Checkbox, InputNumber, Alert,
+  Checkbox, InputNumber, Alert, Popconfirm, Tooltip,
 } from "antd";
 import {
   HistoryOutlined, SwapOutlined, EnvironmentOutlined,
   CheckCircleFilled, MinusCircleOutlined, LockOutlined,
-  StopOutlined,
+  StopOutlined, MobileOutlined,
 } from "@ant-design/icons";
 import { useState, useEffect, useRef } from "react";
 import dayjs from "dayjs";
@@ -723,6 +723,21 @@ export const EmployeeEdit = () => {
   const isActive: boolean =
     (formProps.initialValues as any)?.is_active ?? true;
 
+  // ── Liberar dispositivo ───────────────────────────────────────────────────
+  const [deviceLoading, setDeviceLoading] = useState(false);
+  const resetDevice = async () => {
+    if (!id) return;
+    setDeviceLoading(true);
+    try {
+      await axiosInstance.patch(`/employees/${id}/reset-device`);
+      message.success("Dispositivo liberado. El usuario podrá iniciar sesión desde un nuevo celular.");
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail ?? "Error al liberar el dispositivo");
+    } finally {
+      setDeviceLoading(false);
+    }
+  };
+
   const onSavePassword = async (values: { password: string }) => {
     if (!id) return;
     setPwdSaving(true);
@@ -780,6 +795,22 @@ export const EmployeeEdit = () => {
             >
               Cambiar contraseña
             </Button>
+            {isActive && (
+              <Popconfirm
+                title="¿Liberar dispositivo?"
+                description="El usuario podrá iniciar sesión desde un celular nuevo."
+                onConfirm={resetDevice}
+                okText="Liberar"
+                cancelText="Cancelar"
+                okButtonProps={{ danger: true }}
+              >
+                <Tooltip title="Liberar dispositivo vinculado">
+                  <Button icon={<MobileOutlined />} loading={deviceLoading}>
+                    Liberar dispositivo
+                  </Button>
+                </Tooltip>
+              </Popconfirm>
+            )}
             {defaultButtons}
           </>
         )}

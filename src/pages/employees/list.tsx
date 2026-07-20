@@ -172,7 +172,7 @@ export const EmployeeList = () => {
           render={(_, record: any) => (
             <Space>
               <EditButton hideText size="small" recordItemId={record.id} />
-              {record.role === "employee" && (
+              {record.is_active && (
                 <Popconfirm
                   title="¿Liberar dispositivo?"
                   description={`${record.name} podrá iniciar sesión desde un celular nuevo.`}

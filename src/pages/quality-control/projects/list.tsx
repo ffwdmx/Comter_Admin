@@ -41,6 +41,7 @@ export const QCProjectList = () => {
   const [search, setSearch]       = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const navigate = useNavigate();
+  const isClient = JSON.parse(localStorage.getItem("user") || "{}").role === "contact";
 
   const load = async () => {
     setLoading(true);
@@ -82,13 +83,15 @@ export const QCProjectList = () => {
           <Tooltip title="Recargar">
             <Button icon={<ReloadOutlined />} onClick={load} loading={loading} />
           </Tooltip>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => navigate("/quality-control/projects/create")}
-          >
-            Nuevo Proyecto
-          </Button>
+          {!isClient && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => navigate("/quality-control/projects/create")}
+            >
+              Nuevo Proyecto
+            </Button>
+          )}
         </Space>
       </div>
 
@@ -190,13 +193,15 @@ export const QCProjectList = () => {
                   onClick={() => navigate(`/quality-control/projects/${record.id}`)}
                 />
               </Tooltip>
-              <Tooltip title="Editar">
-                <Button
-                  size="small"
-                  icon={<EditOutlined />}
-                  onClick={() => navigate(`/quality-control/projects/edit/${record.id}`)}
-                />
-              </Tooltip>
+              {!isClient && (
+                <Tooltip title="Editar">
+                  <Button
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={() => navigate(`/quality-control/projects/edit/${record.id}`)}
+                  />
+                </Tooltip>
+              )}
             </Space>
           )}
         />

@@ -302,9 +302,10 @@ const CharCounter = ({ value, max }: { value?: string; max: number }) => {
 // ── Opciones de rol ────────────────────────────────────────────────────────
 
 const roleOptions = [
-  { label: "Administrador", value: "admin" },
-  { label: "Supervisor",    value: "supervisor" },
-  { label: "Empleado",      value: "employee" },
+  { label: "Administrador",   value: "admin" },
+  { label: "Supervisor",      value: "supervisor" },
+  { label: "Empleado",        value: "employee" },
+  { label: "Cliente QC",      value: "contact" },
 ];
 
 // ── Campos del formulario principal ───────────────────────────────────────
@@ -324,12 +325,20 @@ const EmployeeFormFields = ({
     optionValue: "id",
   });
 
+  const { selectProps: clientSelectProps } = useSelect({
+    resource:    "clients",
+    optionLabel: "name",
+    optionValue: "id",
+  });
+
   const form = Form.useFormInstance();
   const curpValue         = Form.useWatch("curp",                form);
   const rfcValue          = Form.useWatch("rfc",                 form);
   const sdbValue          = Form.useWatch("salario_diario_base", form);
   const factorValue       = Form.useWatch("factor_integracion",  form);
   const tieneInfonavit    = Form.useWatch("tiene_infonavit",     form);
+  const roleValue         = Form.useWatch("role",                form);
+  const isContact         = roleValue === "contact";
   // Detecta cuándo Refine termina de cargar los datos del servidor en edit mode
   const calleWatch = Form.useWatch("calle", form);
 
@@ -413,6 +422,17 @@ const EmployeeFormFields = ({
       <Form.Item label="Planta asignada" name="plant_id">
         <Select {...plantSelectProps} placeholder="Sin asignar" allowClear />
       </Form.Item>
+
+      {isContact && (
+        <Form.Item
+          label="Cliente vinculado"
+          name="client_id"
+          rules={[{ required: isContact, message: "Selecciona el cliente para este acceso" }]}
+          extra="El usuario solo verá proyectos QC de este cliente"
+        >
+          <Select {...clientSelectProps} placeholder="Selecciona el cliente..." allowClear />
+        </Form.Item>
+      )}
 
       {!isEdit && (
         <Form.Item label="Contraseña" name="password"

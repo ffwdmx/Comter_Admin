@@ -1,8 +1,8 @@
-import { Refine, Authenticated } from "@refinedev/core";
+import { Refine, Authenticated, useLogout } from "@refinedev/core";
 import { RefineThemes, ThemedLayout, ThemedSider, useNotificationProvider } from "@refinedev/antd";
 import routerProvider from "@refinedev/react-router";
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from "react-router-dom";
-import { ConfigProvider, App as AntApp, Typography } from "antd";
+import { ConfigProvider, App as AntApp, Typography, Button, Space } from "antd";
 import {
   TeamOutlined,
   EnvironmentOutlined,
@@ -16,6 +16,7 @@ import {
   AuditOutlined,
   BugOutlined,
   BarChartOutlined,
+  LogoutOutlined,
 } from "@ant-design/icons";
 import "@refinedev/antd/dist/reset.css";
 
@@ -48,6 +49,85 @@ const Dashboard = () => (
     </Typography.Text>
   </div>
 );
+
+// Layout minimalista para clientes QC (sin sidebar)
+const ClientPortalLayout = () => {
+  const { mutate: logout } = useLogout();
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  return (
+    <div style={{ minHeight: "100vh", background: "#f5f7fa" }}>
+      <header style={{
+        background: "#fff",
+        borderBottom: "1px solid #e8ecf0",
+        padding: "0 24px",
+        height: 56,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+        position: "sticky",
+        top: 0,
+        zIndex: 100,
+      }}>
+        <img src="/comter_logo_short.png" alt="Comter" style={{ height: 36, objectFit: "contain" }} />
+        <Space>
+          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+            {user?.name}
+          </Typography.Text>
+          <Button
+            type="text"
+            icon={<LogoutOutlined />}
+            onClick={() => logout()}
+            style={{ color: "#8c8c8c" }}
+          >
+            Cerrar sesión
+          </Button>
+        </Space>
+      </header>
+      <main style={{ padding: 24 }}>
+        <Outlet />
+      </main>
+    </div>
+  );
+};
+
+// Layout inteligente: cliente → sin sidebar, staff → ThemedLayout
+const AppLayout = () => {
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  if (user?.role === "contact") {
+    return <ClientPortalLayout />;
+  }
+  return (
+    <ThemedLayout
+      Sider={() => (
+        <ThemedSider
+          Title={({ collapsed }) => (
+            <div style={{ padding: "12px 8px", textAlign: "center" }}>
+              <img
+                src="/comter_logo_short.png"
+                alt="Comter"
+                style={{
+                  height: collapsed ? 40 : 56,
+                  objectFit: "contain",
+                  transition: "height 0.2s",
+                }}
+              />
+            </div>
+          )}
+        />
+      )}
+    >
+      <Outlet />
+    </ThemedLayout>
+  );
+};
+
+// Guard: redirige clientes que intenten acceder a rutas de staff
+const StaffOnly = () => {
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  if (user?.role === "contact") return <Navigate to="/quality-control/projects" replace />;
+  return <Outlet />;
+};
 
 export default function App() {
   const notificationProvider = useNotificationProvider();
@@ -142,70 +222,63 @@ export default function App() {
               <Route
                 element={
                   <Authenticated key="auth" fallback={<Navigate to="/login" />}>
-                    <ThemedLayout
-                      Sider={() => (
-                        <ThemedSider
-                          Title={({ collapsed }) => (
-                            <div style={{ padding: "12px 8px", textAlign: "center" }}>
-                              <img
-                                src="/comter_logo_short.png"
-                                alt="Comter"
-                                style={{
-                                  height: collapsed ? 40 : 56,
-                                  objectFit: "contain",
-                                  transition: "height 0.2s",
-                                }}
-                              />
-                            </div>
-                          )}
-                        />
-                      )}
-                    >
-                      <Outlet />
-                    </ThemedLayout>
+                    <AppLayout />
                   </Authenticated>
                 }
               >
-                <Route index element={<Dashboard />} />
+                {/* Índice: staff → Dashboard, cliente → proyectos QC */}
+                <Route index element={
+                  (() => {
+                    const u = JSON.parse(localStorage.getItem("user") || "{}");
+                    return u?.role === "contact"
+                      ? <Navigate to="/quality-control/projects" replace />
+                      : <Dashboard />;
+                  })()
+                } />
 
-                <Route path="/employees">
-                  <Route index          element={<EmployeeList />} />
-                  <Route path="create"  element={<EmployeeCreate />} />
-                  <Route path="edit/:id" element={<EmployeeEdit />} />
+                {/* ── Rutas exclusivas de staff ─────────────────────────── */}
+                <Route element={<StaffOnly />}>
+                  <Route path="/employees">
+                    <Route index          element={<EmployeeList />} />
+                    <Route path="create"  element={<EmployeeCreate />} />
+                    <Route path="edit/:id" element={<EmployeeEdit />} />
+                  </Route>
+
+                  <Route path="/plants">
+                    <Route index          element={<PlantList />} />
+                    <Route path="create"  element={<PlantCreate />} />
+                    <Route path="edit/:id" element={<PlantEdit />} />
+                  </Route>
+
+                  <Route path="/clients">
+                    <Route index          element={<ClientList />} />
+                    <Route path="create"  element={<ClientCreate />} />
+                    <Route path="edit/:id" element={<ClientEdit />} />
+                  </Route>
+
+                  <Route path="/shifts">
+                    <Route index          element={<ShiftTypeList />} />
+                    <Route path="create"  element={<ShiftTypeCreate />} />
+                    <Route path="edit/:id" element={<ShiftTypeEdit />} />
+                  </Route>
+
+                  <Route path="/supervisor"   element={<SupervisorDashboard />} />
+                  <Route path="/attendance"   element={<WeeklyReview />} />
+                  <Route path="/extra-shifts" element={<ExtraShiftRequests />} />
+
+                  <Route path="/quality-control/projects/create"   element={<QCProjectCreate />} />
+                  <Route path="/quality-control/projects/edit/:id" element={<QCProjectEdit />}   />
+
+                  <Route path="/quality-control/inspections/review" element={<InspectionReview />} />
+                  <Route path="/quality-control/defect-types"       element={<DefectTypeList />}   />
+                  <Route path="/quality-control/reports"            element={<ReportGenerator />}  />
                 </Route>
 
-                <Route path="/plants">
-                  <Route index          element={<PlantList />} />
-                  <Route path="create"  element={<PlantCreate />} />
-                  <Route path="edit/:id" element={<PlantEdit />} />
-                </Route>
-
-                <Route path="/clients">
-                  <Route index          element={<ClientList />} />
-                  <Route path="create"  element={<ClientCreate />} />
-                  <Route path="edit/:id" element={<ClientEdit />} />
-                </Route>
-
-                <Route path="/shifts">
-                  <Route index          element={<ShiftTypeList />} />
-                  <Route path="create"  element={<ShiftTypeCreate />} />
-                  <Route path="edit/:id" element={<ShiftTypeEdit />} />
-                </Route>
-
-                <Route path="/supervisor"   element={<SupervisorDashboard />} />
-                <Route path="/attendance"   element={<WeeklyReview />} />
-                <Route path="/extra-shifts" element={<ExtraShiftRequests />} />
-
+                {/* ── Rutas compartidas (staff + cliente) ──────────────── */}
                 <Route path="/quality-control/projects">
-                  <Route index              element={<QCProjectList />}   />
-                  <Route path="create"      element={<QCProjectCreate />} />
-                  <Route path="edit/:id"    element={<QCProjectEdit />}   />
-                  <Route path=":id"         element={<QCProjectDetail />} />
+                  <Route index  element={<QCProjectList />}   />
+                  <Route path=":id" element={<QCProjectDetail />} />
                 </Route>
-
-                <Route path="/quality-control/inspections/review" element={<InspectionReview />} />
-                <Route path="/quality-control/defect-types"       element={<DefectTypeList />}   />
-                <Route path="/quality-control/reports"            element={<ReportGenerator />}  />
               </Route>
 
               <Route path="*" element={<Navigate to="/" />} />

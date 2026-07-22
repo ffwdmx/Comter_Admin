@@ -173,6 +173,7 @@ export const QCProjectDetail = () => {
   const { message } = App.useApp();
   const { id }      = useParams<{ id: string }>();
   const navigate    = useNavigate();
+  const isClient    = JSON.parse(localStorage.getItem("user") || "{}").role === "contact";
   const projectId   = Number(id);
 
   const [project,     setProject]     = useState<QCProject | null>(null);
@@ -319,9 +320,11 @@ export const QCProjectDetail = () => {
           <Tooltip title="Recargar">
             <Button icon={<ReloadOutlined />} onClick={load} />
           </Tooltip>
-          <Tooltip title="Solicitar análisis IA">
-            <Button icon={<RobotOutlined />} onClick={requestAI}>Análisis IA</Button>
-          </Tooltip>
+          {!isClient && (
+            <Tooltip title="Solicitar análisis IA">
+              <Button icon={<RobotOutlined />} onClick={requestAI}>Análisis IA</Button>
+            </Tooltip>
+          )}
           <Button icon={<DownloadOutlined />} onClick={() => downloadReport("excel")}>Excel</Button>
           <Button icon={<DownloadOutlined />} type="primary" onClick={() => downloadReport("pdf")}>PDF</Button>
         </Space>
@@ -403,28 +406,30 @@ export const QCProjectDetail = () => {
                 <Table.Column title="Estado" dataIndex="status"
                   render={(v) => <Tag color={STATUS_COLOR[v]}>{STATUS_LABEL[v] ?? v}</Tag>}
                 />
-                <Table.Column title="Acciones" align="center"
-                  render={(_: unknown, record: QCInspection) =>
-                    record.status === "submitted" ? (
-                      <Space size={4}>
-                        <Tooltip title="Aprobar">
-                          <Button
-                            size="small" type="primary"
-                            icon={<CheckCircleOutlined />}
-                            onClick={() => handleApprove(record.id, true)}
-                          />
-                        </Tooltip>
-                        <Tooltip title="Rechazar">
-                          <Button
-                            size="small" danger
-                            icon={<CloseCircleOutlined />}
-                            onClick={() => handleApprove(record.id, false)}
-                          />
-                        </Tooltip>
-                      </Space>
-                    ) : null
-                  }
-                />
+                {!isClient && (
+                  <Table.Column title="Acciones" align="center"
+                    render={(_: unknown, record: QCInspection) =>
+                      record.status === "submitted" ? (
+                        <Space size={4}>
+                          <Tooltip title="Aprobar">
+                            <Button
+                              size="small" type="primary"
+                              icon={<CheckCircleOutlined />}
+                              onClick={() => handleApprove(record.id, true)}
+                            />
+                          </Tooltip>
+                          <Tooltip title="Rechazar">
+                            <Button
+                              size="small" danger
+                              icon={<CloseCircleOutlined />}
+                              onClick={() => handleApprove(record.id, false)}
+                            />
+                          </Tooltip>
+                        </Space>
+                      ) : null
+                    }
+                  />
+                )}
               </Table>
             ),
           },
@@ -433,15 +438,17 @@ export const QCProjectDetail = () => {
             label: `Inspectores (${assignments.filter((a) => a.is_active).length})`,
             children: (
               <>
-                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-                  <Button
-                    type="primary"
-                    icon={<UserAddOutlined />}
-                    onClick={() => setAssignModal(true)}
-                  >
-                    Asignar inspector
-                  </Button>
-                </div>
+                {!isClient && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+                    <Button
+                      type="primary"
+                      icon={<UserAddOutlined />}
+                      onClick={() => setAssignModal(true)}
+                    >
+                      Asignar inspector
+                    </Button>
+                  </div>
+                )}
                 <Table dataSource={assignments} rowKey="id" size="small">
                   <Table.Column title="Inspector" dataIndex="employee_name"
                     render={(v, record: Assignment) => {
@@ -452,17 +459,19 @@ export const QCProjectDetail = () => {
                   <Table.Column title="Estado" dataIndex="is_active"
                     render={(v) => <Tag color={v ? "green" : "default"}>{v ? "Activo" : "Inactivo"}</Tag>}
                   />
-                  <Table.Column title="Acciones" align="center"
-                    render={(_: unknown, record: Assignment) => (
-                      <Tooltip title="Eliminar asignación">
-                        <Button
-                          size="small" danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => handleRemoveAssignment(record.id)}
-                        />
-                      </Tooltip>
-                    )}
-                  />
+                  {!isClient && (
+                    <Table.Column title="Acciones" align="center"
+                      render={(_: unknown, record: Assignment) => (
+                        <Tooltip title="Eliminar asignación">
+                          <Button
+                            size="small" danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => handleRemoveAssignment(record.id)}
+                          />
+                        </Tooltip>
+                      )}
+                    />
+                  )}
                 </Table>
               </>
             ),

@@ -51,9 +51,7 @@ axiosInstance.interceptors.response.use(
       }
     }
 
-    if (status === 403) {
-      forceLogout();
-    }
+    // 403 = Forbidden (no permisos), NO es un error de sesión → no cerrar sesión
 
     return Promise.reject(error);
   }

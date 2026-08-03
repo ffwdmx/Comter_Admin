@@ -191,37 +191,36 @@ export const QCProjectDetail = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [
-        { data: proj },
-        { data: st },
-        { data: tr },
-        { data: par },
-        { data: insps },
-        { data: asgns },
-        { data: emps },
-      ] = await Promise.all([
+      // Carga base: accesible para todos los roles incluyendo contact
+      const [proj, st, tr, par, insps] = await Promise.all([
         axiosInstance.get(`/qc/projects/${projectId}`),
         axiosInstance.get(`/qc/projects/${projectId}/stats`),
         axiosInstance.get(`/qc/projects/${projectId}/trend`),
         axiosInstance.get(`/qc/projects/${projectId}/pareto`),
         axiosInstance.get(`/qc/inspections/`, { params: { project_id: projectId, limit: 100 } }),
-        axiosInstance.get(`/qc/projects/${projectId}/assignments/`),
-        axiosInstance.get("/employees", { params: { limit: 300 } }),
       ]);
-      setProject(proj);
-      setStats(st);
-      setTrend(Array.isArray(tr) ? tr : []);
-      setPareto(Array.isArray(par) ? par : []);
-      setInspections(Array.isArray(insps) ? insps : []);
-      setAssignments(Array.isArray(asgns) ? asgns : asgns?.items ?? []);
-      const empList = Array.isArray(emps) ? emps : emps?.items ?? [];
-      setEmployees(empList);
+      setProject(proj.data);
+      setStats(st.data);
+      setTrend(Array.isArray(tr.data) ? tr.data : []);
+      setPareto(Array.isArray(par.data) ? par.data : []);
+      setInspections(Array.isArray(insps.data) ? insps.data : []);
+
+      // Asignaciones y listado de empleados: solo para supervisores y admins
+      if (!isClient) {
+        const [asgns, emps] = await Promise.all([
+          axiosInstance.get(`/qc/projects/${projectId}/assignments/`),
+          axiosInstance.get("/employees", { params: { limit: 300 } }),
+        ]);
+        setAssignments(Array.isArray(asgns.data) ? asgns.data : asgns.data?.items ?? []);
+        const empList = Array.isArray(emps.data) ? emps.data : emps.data?.items ?? [];
+        setEmployees(empList);
+      }
     } catch {
       message.error("Error cargando detalle del proyecto");
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, isClient]);
 
   useEffect(() => { load(); }, [load]);
 

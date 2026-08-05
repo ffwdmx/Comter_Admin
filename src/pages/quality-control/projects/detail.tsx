@@ -193,11 +193,13 @@ export const QCProjectDetail = () => {
   const [assigning,   setAssigning]   = useState(false);
 
   // Participantes de inspección
-  const [participantModal,  setParticipantModal]  = useState(false);
-  const [selectedInsp,      setSelectedInsp]      = useState<QCInspection | null>(null);
-  const [modalParticipants, setModalParticipants] = useState<QCParticipant[]>([]);
-  const [addParticipantId,  setAddParticipantId]  = useState<number | undefined>(undefined);
-  const [addingParticipant, setAddingParticipant] = useState(false);
+  const [participantModal,    setParticipantModal]    = useState(false);
+  const [selectedInsp,        setSelectedInsp]        = useState<QCInspection | null>(null);
+  const [modalParticipants,   setModalParticipants]   = useState<QCParticipant[]>([]);
+  const [addParticipantId,    setAddParticipantId]    = useState<number | undefined>(undefined);
+  const [addingParticipant,   setAddingParticipant]   = useState(false);
+  const [eligibleParticipants, setEligibleParticipants] = useState<{ id: number; name: string; employee_no: string }[]>([]);
+  const [loadingEligible,     setLoadingEligible]     = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -277,11 +279,21 @@ export const QCProjectDetail = () => {
     }
   };
 
-  const openParticipantModal = (record: QCInspection) => {
+  const openParticipantModal = async (record: QCInspection) => {
     setSelectedInsp(record);
     setModalParticipants(record.participants ?? []);
     setAddParticipantId(undefined);
+    setEligibleParticipants([]);
     setParticipantModal(true);
+    setLoadingEligible(true);
+    try {
+      const { data } = await axiosInstance.get(`/qc/inspections/${record.id}/eligible-participants`);
+      setEligibleParticipants(Array.isArray(data) ? data : []);
+    } catch {
+      message.error("No se pudo cargar empleados con check-in en este turno");
+    } finally {
+      setLoadingEligible(false);
+    }
   };
 
   const handleAddParticipant = async () => {
@@ -294,6 +306,7 @@ export const QCProjectDetail = () => {
       );
       const updated: QCParticipant[] = data;
       setModalParticipants(updated);
+      setEligibleParticipants((prev) => prev.filter((e) => e.id !== addParticipantId));
       setAddParticipantId(undefined);
       setInspections((prev) => prev.map((i) =>
         i.id === selectedInsp.id
@@ -320,6 +333,9 @@ export const QCProjectDetail = () => {
           ? { ...i, participants: updated, participant_count: updated.length }
           : i
       ));
+      // Recargar elegibles: el empleado eliminado vuelve a aparecer si tuvo check-in en el turno
+      const { data } = await axiosInstance.get(`/qc/inspections/${selectedInsp.id}/eligible-participants`);
+      setEligibleParticipants(Array.isArray(data) ? data : []);
       message.success("Participante eliminado");
     } catch {
       message.error("Error al eliminar participante");
@@ -654,20 +670,28 @@ export const QCProjectDetail = () => {
           </div>
         )}
 
-        {/* Add participant */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+        {/* Add participant — solo empleados con check-in en este turno */}
+        <div style={{ marginBottom: 6 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Solo se muestran empleados con check-in en este turno
+          </Typography.Text>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
           <Select
             style={{ flex: 1 }}
             showSearch
-            placeholder="Agregar participante..."
+            loading={loadingEligible}
+            disabled={loadingEligible}
+            placeholder={loadingEligible ? "Cargando empleados del turno…" : eligibleParticipants.length === 0 ? "Sin empleados elegibles en este turno" : "Agregar participante..."}
             value={addParticipantId}
             onChange={(v) => setAddParticipantId(v)}
             filterOption={(input, option) =>
               (String(option?.label ?? "")).toLowerCase().includes(input.toLowerCase())
             }
-            options={employees
-              .filter((e) => !modalParticipants.find((p) => p.employee_id === e.id))
-              .map((e) => ({ label: `${e.name} (${e.employee_no})`, value: e.id }))}
+            options={eligibleParticipants.map((e) => ({
+              label: `${e.name} (${e.employee_no})`,
+              value: e.id,
+            }))}
           />
           <Button
             type="primary"

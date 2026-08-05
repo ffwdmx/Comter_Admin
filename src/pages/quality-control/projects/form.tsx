@@ -9,6 +9,7 @@ import { ArrowLeftOutlined, SaveOutlined } from "@ant-design/icons";
 import { axiosInstance } from "../../../providers/dataProvider";
 
 interface Client { id: number; name: string; }
+interface ComponentTypeOption { id: number; code: string; label: string; }
 
 export const QCProjectCreate = () => <QCProjectForm mode="create" />;
 export const QCProjectEdit   = () => <QCProjectForm mode="edit"   />;
@@ -16,7 +17,8 @@ export const QCProjectEdit   = () => <QCProjectForm mode="edit"   />;
 const QCProjectForm = ({ mode }: { mode: "create" | "edit" }) => {
   const { message } = App.useApp();
   const [form]    = Form.useForm();
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients]             = useState<Client[]>([]);
+  const [componentTypes, setComponentTypes] = useState<ComponentTypeOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
   const navigate  = useNavigate();
@@ -27,8 +29,12 @@ const QCProjectForm = ({ mode }: { mode: "create" | "edit" }) => {
     const load = async () => {
       setLoading(true);
       try {
-        const { data: clientsData } = await axiosInstance.get("/clients");
+        const [{ data: clientsData }, { data: typesData }] = await Promise.all([
+          axiosInstance.get("/clients"),
+          axiosInstance.get("/qc/component-types"),
+        ]);
         setClients(Array.isArray(clientsData) ? clientsData : clientsData?.items ?? []);
+        setComponentTypes(Array.isArray(typesData) ? typesData : []);
 
         if (isEdit && id) {
           const { data } = await axiosInstance.get(`/qc/projects/${id}`);
@@ -134,14 +140,11 @@ const QCProjectForm = ({ mode }: { mode: "create" | "edit" }) => {
               <Form.Item label="Tipo de componente" name="component_type" rules={[{ required: true, message: "Selecciona el tipo de componente" }]}>
                 <Select
                   placeholder="Seleccionar tipo"
-                  options={[
-                    { label: "Conector",  value: "connector" },
-                    { label: "Arnés",     value: "harness"   },
-                    { label: "Cable",     value: "cable"     },
-                    { label: "Sensor",    value: "sensor"    },
-                    { label: "PCB",       value: "pcb"       },
-                    { label: "Sello",     value: "seal"      },
-                  ]}
+                  showSearch
+                  filterOption={(input, option) =>
+                    (String(option?.label ?? "")).toLowerCase().includes(input.toLowerCase())
+                  }
+                  options={componentTypes.map((t) => ({ label: t.label, value: t.code }))}
                 />
               </Form.Item>
             </Col>

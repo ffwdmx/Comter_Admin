@@ -29,16 +29,12 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   active: "green", inactive: "default",
 };
-const COMPONENT_LABELS: Record<string, string> = {
-  connector: "Conector", harness: "Arnés", cable: "Cable",
-  sensor: "Sensor", pcb: "PCB", seal: "Sello",
-};
-
 export const QCProjectList = () => {
   const { message } = App.useApp();
-  const [projects, setProjects]   = useState<QCProjectListItem[]>([]);
-  const [loading, setLoading]     = useState(false);
-  const [search, setSearch]       = useState("");
+  const [projects, setProjects]         = useState<QCProjectListItem[]>([]);
+  const [componentLabels, setComponentLabels] = useState<Record<string, string>>({});
+  const [loading, setLoading]           = useState(false);
+  const [search, setSearch]             = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const navigate = useNavigate();
   const isClient = JSON.parse(localStorage.getItem("user") || "{}").role === "contact";
@@ -46,8 +42,16 @@ export const QCProjectList = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await axiosInstance.get("/qc/projects/");
+      const [{ data }, { data: typesData }] = await Promise.all([
+        axiosInstance.get("/qc/projects/"),
+        axiosInstance.get("/qc/component-types?include_inactive=true"),
+      ]);
       setProjects(Array.isArray(data) ? data : []);
+      if (Array.isArray(typesData)) {
+        const map: Record<string, string> = {};
+        typesData.forEach((t: { code: string; label: string }) => { map[t.code] = t.label; });
+        setComponentLabels(map);
+      }
     } catch {
       message.error("Error cargando proyectos QC");
     } finally {
@@ -143,7 +147,7 @@ export const QCProjectList = () => {
         <Table.Column
           title="Componente"
           dataIndex="component_type"
-          render={(v) => <Tag>{COMPONENT_LABELS[v] ?? v}</Tag>}
+          render={(v) => <Tag>{componentLabels[v] ?? v}</Tag>}
         />
         <Table.Column
           title="Objetivo FPY"

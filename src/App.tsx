@@ -17,6 +17,7 @@ import {
   BugOutlined,
   BarChartOutlined,
   LogoutOutlined,
+  AppstoreOutlined,
 } from "@ant-design/icons";
 import "@refinedev/antd/dist/reset.css";
 
@@ -40,6 +41,7 @@ import { InspectionReview }         from "./pages/quality-control/inspections/re
 import { DefectTypeList }           from "./pages/quality-control/defect-types/list";
 import { ReportGenerator }          from "./pages/quality-control/reports/generator";
 import { ExtraShiftRequests }       from "./pages/attendance/ExtraShiftRequests";
+import { ComponentTypeList }        from "./pages/quality-control/component-types";
 
 const Dashboard = () => (
   <div style={{ padding: 24 }}>
@@ -213,6 +215,11 @@ export default function App() {
                 list: "/quality-control/reports",
                 meta: { label: "QC — Reportes", icon: <BarChartOutlined /> },
               },
+              {
+                name: "qc-component-types",
+                list: "/quality-control/component-types",
+                meta: { label: "QC — Componentes", icon: <AppstoreOutlined /> },
+              },
             ]}
             options={{ syncWithLocation: true, warnWhenUnsavedChanges: true }}
           >
@@ -269,9 +276,10 @@ export default function App() {
                   <Route path="/quality-control/projects/create"   element={<QCProjectCreate />} />
                   <Route path="/quality-control/projects/edit/:id" element={<QCProjectEdit />}   />
 
-                  <Route path="/quality-control/inspections/review" element={<InspectionReview />} />
-                  <Route path="/quality-control/defect-types"       element={<DefectTypeList />}   />
-                  <Route path="/quality-control/reports"            element={<ReportGenerator />}  />
+                  <Route path="/quality-control/inspections/review"  element={<InspectionReview />}   />
+                  <Route path="/quality-control/defect-types"        element={<DefectTypeList />}    />
+                  <Route path="/quality-control/reports"             element={<ReportGenerator />}   />
+                  <Route path="/quality-control/component-types"     element={<ComponentTypeList />} />
                 </Route>
 
                 {/* ── Rutas compartidas (staff + cliente) ──────────────── */}

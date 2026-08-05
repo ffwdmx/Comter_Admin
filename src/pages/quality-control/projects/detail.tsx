@@ -8,7 +8,7 @@ import {
 import {
   ArrowLeftOutlined, CheckCircleOutlined, CloseCircleOutlined,
   UserAddOutlined, DeleteOutlined, DownloadOutlined, RobotOutlined,
-  ReloadOutlined, ExperimentOutlined,
+  ReloadOutlined, ExperimentOutlined, TeamOutlined, PlusOutlined,
 } from "@ant-design/icons";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartTooltip,
@@ -44,12 +44,16 @@ interface ParetoPoint {
   quantity: number; percentage: number; cumulative_pct: number;
 }
 
+interface QCParticipant { employee_id: number; name: string; }
+
 interface QCInspection {
   id: number; inspection_date: string; shift: string; status: string;
   total_inspected: number; total_rejected: number; fpy?: number;
   overall_yield?: number; dpmo?: number; ppm?: number;
   employee_name?: string; yield_status?: string;
   lot_number?: string; review_comment?: string;
+  participants?: QCParticipant[];
+  participant_count?: number;
 }
 
 interface Employee { id: number; name: string; employee_no: string; }
@@ -188,6 +192,13 @@ export const QCProjectDetail = () => {
   const [assignForm]  = Form.useForm();
   const [assigning,   setAssigning]   = useState(false);
 
+  // Participantes de inspección
+  const [participantModal,  setParticipantModal]  = useState(false);
+  const [selectedInsp,      setSelectedInsp]      = useState<QCInspection | null>(null);
+  const [modalParticipants, setModalParticipants] = useState<QCParticipant[]>([]);
+  const [addParticipantId,  setAddParticipantId]  = useState<number | undefined>(undefined);
+  const [addingParticipant, setAddingParticipant] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -263,6 +274,55 @@ export const QCProjectDetail = () => {
       setAssignments((prev) => prev.filter((a) => a.id !== assignId));
     } catch {
       message.error("Error al eliminar asignación");
+    }
+  };
+
+  const openParticipantModal = (record: QCInspection) => {
+    setSelectedInsp(record);
+    setModalParticipants(record.participants ?? []);
+    setAddParticipantId(undefined);
+    setParticipantModal(true);
+  };
+
+  const handleAddParticipant = async () => {
+    if (!selectedInsp || addParticipantId == null) return;
+    setAddingParticipant(true);
+    try {
+      const { data } = await axiosInstance.post(
+        `/qc/inspections/${selectedInsp.id}/participants`,
+        { employee_id: addParticipantId },
+      );
+      const updated: QCParticipant[] = data;
+      setModalParticipants(updated);
+      setAddParticipantId(undefined);
+      setInspections((prev) => prev.map((i) =>
+        i.id === selectedInsp.id
+          ? { ...i, participants: updated, participant_count: updated.length }
+          : i
+      ));
+      message.success("Participante agregado");
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      message.error(detail ?? "Error al agregar participante");
+    } finally {
+      setAddingParticipant(false);
+    }
+  };
+
+  const handleRemoveParticipant = async (empId: number) => {
+    if (!selectedInsp) return;
+    try {
+      await axiosInstance.delete(`/qc/inspections/${selectedInsp.id}/participants/${empId}`);
+      const updated = modalParticipants.filter((p) => p.employee_id !== empId);
+      setModalParticipants(updated);
+      setInspections((prev) => prev.map((i) =>
+        i.id === selectedInsp.id
+          ? { ...i, participants: updated, participant_count: updated.length }
+          : i
+      ));
+      message.success("Participante eliminado");
+    } catch {
+      message.error("Error al eliminar participante");
     }
   };
 
@@ -389,7 +449,23 @@ export const QCProjectDetail = () => {
                   render={(v) => new Date(v).toLocaleDateString("es-MX")} />
                 <Table.Column title="Turno" dataIndex="shift"
                   render={(v) => SHIFT_LABEL[v] ?? v} />
-                <Table.Column title="Inspector" dataIndex="employee_name" render={(v) => v ?? "—"} />
+                <Table.Column title="Inspector / Participantes" dataIndex="employee_name"
+                  render={(v: string | undefined, record: QCInspection) => {
+                    const parts = record.participants ?? [];
+                    const allNames = [v ?? "—", ...parts.map((p) => p.name)];
+                    if (parts.length === 0) return v ?? "—";
+                    return (
+                      <Tooltip title={allNames.join(", ")} placement="topLeft">
+                        <span>
+                          {v ?? "—"}{" "}
+                          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                            (+{parts.length})
+                          </Typography.Text>
+                        </span>
+                      </Tooltip>
+                    );
+                  }}
+                />
                 <Table.Column title="Insp." dataIndex="total_inspected" align="center" />
                 <Table.Column title="Rech." dataIndex="total_rejected" align="center" />
                 <Table.Column title="FPY" dataIndex="fpy" align="center"
@@ -407,26 +483,35 @@ export const QCProjectDetail = () => {
                 />
                 {!isClient && (
                   <Table.Column title="Acciones" align="center"
-                    render={(_: unknown, record: QCInspection) =>
-                      record.status === "submitted" ? (
-                        <Space size={4}>
-                          <Tooltip title="Aprobar">
-                            <Button
-                              size="small" type="primary"
-                              icon={<CheckCircleOutlined />}
-                              onClick={() => handleApprove(record.id, true)}
-                            />
-                          </Tooltip>
-                          <Tooltip title="Rechazar">
-                            <Button
-                              size="small" danger
-                              icon={<CloseCircleOutlined />}
-                              onClick={() => handleApprove(record.id, false)}
-                            />
-                          </Tooltip>
-                        </Space>
-                      ) : null
-                    }
+                    render={(_: unknown, record: QCInspection) => (
+                      <Space size={4}>
+                        {record.status === "submitted" && (
+                          <>
+                            <Tooltip title="Aprobar">
+                              <Button
+                                size="small" type="primary"
+                                icon={<CheckCircleOutlined />}
+                                onClick={() => handleApprove(record.id, true)}
+                              />
+                            </Tooltip>
+                            <Tooltip title="Rechazar">
+                              <Button
+                                size="small" danger
+                                icon={<CloseCircleOutlined />}
+                                onClick={() => handleApprove(record.id, false)}
+                              />
+                            </Tooltip>
+                          </>
+                        )}
+                        <Tooltip title="Gestionar participantes">
+                          <Button
+                            size="small"
+                            icon={<TeamOutlined />}
+                            onClick={() => openParticipantModal(record)}
+                          />
+                        </Tooltip>
+                      </Space>
+                    )}
                   />
                 )}
               </Table>
@@ -528,6 +613,77 @@ export const QCProjectDetail = () => {
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Participant Modal */}
+      <Modal
+        open={participantModal}
+        title={
+          <Space>
+            <TeamOutlined />
+            {`Participantes — ${SHIFT_LABEL[selectedInsp?.shift ?? ""] ?? selectedInsp?.shift ?? ""} ${selectedInsp?.inspection_date ?? ""}`}
+          </Space>
+        }
+        footer={null}
+        onCancel={() => setParticipantModal(false)}
+        width={520}
+      >
+        {/* Current participants */}
+        <div style={{ marginBottom: 16 }}>
+          <Typography.Text strong>
+            Inspector (reportador):
+          </Typography.Text>{" "}
+          <Typography.Text>{selectedInsp?.employee_name ?? "—"}</Typography.Text>
+        </div>
+
+        {modalParticipants.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <Typography.Text strong>Participantes adicionales:</Typography.Text>
+            <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {modalParticipants.map((p) => (
+                <Tag
+                  key={p.employee_id}
+                  closable
+                  onClose={() => handleRemoveParticipant(p.employee_id)}
+                  style={{ fontSize: 13, padding: "4px 8px" }}
+                >
+                  {p.name}
+                </Tag>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Add participant */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+          <Select
+            style={{ flex: 1 }}
+            showSearch
+            placeholder="Agregar participante..."
+            value={addParticipantId}
+            onChange={(v) => setAddParticipantId(v)}
+            filterOption={(input, option) =>
+              (String(option?.label ?? "")).toLowerCase().includes(input.toLowerCase())
+            }
+            options={employees
+              .filter((e) => !modalParticipants.find((p) => p.employee_id === e.id))
+              .map((e) => ({ label: `${e.name} (${e.employee_no})`, value: e.id }))}
+          />
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            loading={addingParticipant}
+            disabled={addParticipantId == null}
+            onClick={handleAddParticipant}
+          >
+            Agregar
+          </Button>
+        </div>
+
+        <Typography.Text type="secondary" style={{ display: "block", marginTop: 12, fontSize: 12 }}>
+          Total: {1 + modalParticipants.length}{" "}
+          {1 + modalParticipants.length === 1 ? "persona" : "personas"}
+        </Typography.Text>
       </Modal>
     </div>
   );

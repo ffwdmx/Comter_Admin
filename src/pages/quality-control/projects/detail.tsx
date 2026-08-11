@@ -16,6 +16,7 @@ import {
   ComposedChart, Bar, Line as RLine,
 } from "recharts";
 import { axiosInstance } from "../../../providers/dataProvider";
+import dayjs from "dayjs";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -77,10 +78,7 @@ const SHIFT_LABEL: Record<string, string> = {
   morning: "Mañana", afternoon: "Tarde", night: "Noche",
 };
 
-const fmtDate = (d: string) => {
-  const dt = new Date(d);
-  return `${dt.getDate().toString().padStart(2,"0")}/${(dt.getMonth()+1).toString().padStart(2,"0")}`;
-};
+const fmtDate = (d: string) => dayjs(d, "YYYY-MM-DD").format("DD/MM");
 
 // ── KPI Card ───────────────────────────────────────────────────────────────
 
@@ -462,7 +460,7 @@ export const QCProjectDetail = () => {
                 pagination={{ pageSize: 20 }}
               >
                 <Table.Column title="Fecha" dataIndex="inspection_date"
-                  render={(v) => new Date(v).toLocaleDateString("es-MX")} />
+                  render={(v) => dayjs(v, "YYYY-MM-DD").format("DD/MM/YYYY")} />
                 <Table.Column title="Turno" dataIndex="shift"
                   render={(v) => SHIFT_LABEL[v] ?? v} />
                 <Table.Column title="Inspector / Participantes" dataIndex="employee_name"

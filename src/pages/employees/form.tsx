@@ -306,6 +306,7 @@ const roleOptions = [
   { label: "Supervisor",      value: "supervisor" },
   { label: "Empleado",        value: "employee" },
   { label: "Cliente QC",      value: "contact" },
+  { label: "Proveedor",       value: "vendor" },
 ];
 
 // ── Campos del formulario principal ───────────────────────────────────────
@@ -339,6 +340,7 @@ const EmployeeFormFields = ({
   const tieneInfonavit    = Form.useWatch("tiene_infonavit",     form);
   const roleValue         = Form.useWatch("role",                form);
   const isContact         = roleValue === "contact";
+  const isVendor          = roleValue === "vendor";
   // Detecta cuándo Refine termina de cargar los datos del servidor en edit mode
   const calleWatch = Form.useWatch("calle", form);
 
@@ -419,9 +421,11 @@ const EmployeeFormFields = ({
         <Select options={roleOptions} />
       </Form.Item>
 
-      <Form.Item label="Planta asignada" name="plant_id">
-        <Select {...plantSelectProps} placeholder="Sin asignar" allowClear />
-      </Form.Item>
+      {!isVendor && (
+        <Form.Item label="Planta asignada" name="plant_id">
+          <Select {...plantSelectProps} placeholder="Sin asignar" allowClear />
+        </Form.Item>
+      )}
 
       {isContact && (
         <Form.Item
@@ -431,6 +435,18 @@ const EmployeeFormFields = ({
           extra="El usuario solo verá proyectos QC de este cliente"
         >
           <Select {...clientSelectProps} placeholder="Selecciona el cliente..." allowClear />
+        </Form.Item>
+      )}
+
+      {isVendor && (
+        <Form.Item>
+          <div style={{
+            background: "#e6f4ff", border: "1px solid #91caff",
+            borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#0958d9",
+          }}>
+            <strong>Proveedor:</strong> el acceso a proyectos QC se asigna individualmente
+            desde el detalle de cada proyecto en el módulo de QC.
+          </div>
         </Form.Item>
       )}
 

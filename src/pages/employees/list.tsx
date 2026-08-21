@@ -8,12 +8,16 @@ const roleColor: Record<string, string> = {
   admin:      "purple",
   supervisor: "blue",
   employee:   "green",
+  contact:    "cyan",
+  vendor:     "orange",
 };
 
 const roleLabel: Record<string, string> = {
   admin:      "Administrador",
   supervisor: "Supervisor",
   employee:   "Empleado",
+  contact:    "Cliente QC",
+  vendor:     "Proveedor",
 };
 
 const reasonLabel: Record<string, string> = {
@@ -93,6 +97,8 @@ export const EmployeeList = () => {
               { label: "Administrador", value: "admin" },
               { label: "Supervisor",    value: "supervisor" },
               { label: "Empleado",      value: "employee" },
+              { label: "Cliente QC",    value: "contact" },
+              { label: "Proveedor",     value: "vendor" },
             ]}
           />
           <Tooltip title="Mostrar empleados dados de baja">

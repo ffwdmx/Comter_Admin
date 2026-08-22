@@ -8,7 +8,7 @@ import {
 import {
   LeftOutlined, RightOutlined, PlusOutlined,
   EditOutlined, DeleteOutlined, SendOutlined, StopOutlined,
-  MedicineBoxOutlined, CheckOutlined, CloseOutlined,
+  MedicineBoxOutlined, CheckOutlined, CloseOutlined, AuditOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -31,6 +31,8 @@ interface AttendancePair {
   check_out_time: string | null;
   hours_worked:   number | null;
   notes:          string | null;
+  check_in_recorded_by?:  string | null;
+  check_out_recorded_by?: string | null;
 }
 
 interface DayCell {
@@ -772,6 +774,9 @@ export function WeeklyReview() {
         <span><Badge color="orange"   /> Incapacidad (días 1-3, patrón)</span>
         <span><Badge color="purple"   /> Incapacidad (día 4+, IMSS)</span>
         <span><Badge color="default"  /> Corrección pendiente de aprobación</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <AuditOutlined style={{ fontSize: 12, color: "#d48806" }} /> Registro/edición manual (admin/supervisor)
+        </span>
       </div>
 
       {/* ── Modal: Agregar registro de asistencia ───────────────────────── */}
@@ -1372,6 +1377,14 @@ interface PairRowProps {
   onAddSalida: () => void;
 }
 
+function ManualBadge({ name }: { name: string }) {
+  return (
+    <Tooltip title={`Registrado/editado manualmente por: ${name}`}>
+      <AuditOutlined style={{ fontSize: 11, color: "#d48806", cursor: "help" }} />
+    </Tooltip>
+  );
+}
+
 function PairRow({ pair, label, onEdit, onDelete, onAddSalida }: PairRowProps) {
   const ciTime = toMX(pair.check_in_time);
   const coTime = toMX(pair.check_out_time);
@@ -1388,6 +1401,7 @@ function PairRow({ pair, label, onEdit, onDelete, onAddSalida }: PairRowProps) {
       {pair.check_in_id != null ? (
         <Space size={3} align="center">
           <Tag color="success" style={{ margin: 0, fontSize: 11 }}>{ciTime}</Tag>
+          {pair.check_in_recorded_by && <ManualBadge name={pair.check_in_recorded_by} />}
           <Tooltip title="Editar entrada">
             <Button size="small" type="text" icon={<EditOutlined style={{ fontSize: 11 }} />}
               onClick={() => onEdit(pair.check_in_id!, pair.check_in_time!, "entrada")}
@@ -1405,6 +1419,7 @@ function PairRow({ pair, label, onEdit, onDelete, onAddSalida }: PairRowProps) {
       {pair.check_out_id != null ? (
         <Space size={3} align="center">
           <Tag color="warning" style={{ margin: 0, fontSize: 11 }}>{coTime}</Tag>
+          {pair.check_out_recorded_by && <ManualBadge name={pair.check_out_recorded_by} />}
           <Tooltip title="Editar salida">
             <Button size="small" type="text" icon={<EditOutlined style={{ fontSize: 11 }} />}
               onClick={() => onEdit(pair.check_out_id!, pair.check_out_time!, "salida")}

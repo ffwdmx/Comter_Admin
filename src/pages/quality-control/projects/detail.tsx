@@ -175,7 +175,9 @@ export const QCProjectDetail = () => {
   const { message } = App.useApp();
   const { id }      = useParams<{ id: string }>();
   const navigate    = useNavigate();
-  const isClient    = JSON.parse(localStorage.getItem("user") || "{}").role === "contact";
+  const isClient    = ["contact", "vendor"].includes(
+    JSON.parse(localStorage.getItem("user") || "{}").role
+  );
   const projectId   = Number(id);
 
   const [project,     setProject]     = useState<QCProject | null>(null);

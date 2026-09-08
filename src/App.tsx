@@ -93,10 +93,10 @@ const ClientPortalLayout = () => {
   );
 };
 
-// Layout inteligente: cliente → sin sidebar, staff → ThemedLayout
+// Layout inteligente: cliente/vendor → sin sidebar, staff → ThemedLayout
 const AppLayout = () => {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  if (user?.role === "contact") {
+  if (user?.role === "contact" || user?.role === "vendor") {
     return <ClientPortalLayout />;
   }
   return (
@@ -124,10 +124,11 @@ const AppLayout = () => {
   );
 };
 
-// Guard: redirige clientes que intenten acceder a rutas de staff
+// Guard: redirige clientes y proveedores que intenten acceder a rutas de staff
 const StaffOnly = () => {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  if (user?.role === "contact") return <Navigate to="/quality-control/projects" replace />;
+  if (user?.role === "contact" || user?.role === "vendor")
+    return <Navigate to="/quality-control/projects" replace />;
   return <Outlet />;
 };
 
@@ -233,11 +234,11 @@ export default function App() {
                   </Authenticated>
                 }
               >
-                {/* Índice: staff → Dashboard, cliente → proyectos QC */}
+                {/* Índice: staff → Dashboard, cliente/vendor → proyectos QC */}
                 <Route index element={
                   (() => {
                     const u = JSON.parse(localStorage.getItem("user") || "{}");
-                    return u?.role === "contact"
+                    return (u?.role === "contact" || u?.role === "vendor")
                       ? <Navigate to="/quality-control/projects" replace />
                       : <Dashboard />;
                   })()

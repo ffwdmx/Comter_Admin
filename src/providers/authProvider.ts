@@ -13,13 +13,14 @@ export const authProvider: AuthProvider = {
 
       const { access_token, refresh_token, user } = data;
 
-      // Solo admins, supervisores y clientes QC pueden acceder al portal
-      if (user.role !== "admin" && user.role !== "supervisor" && user.role !== "contact") {
+      // Solo admins, supervisores, clientes QC y proveedores pueden acceder al portal
+      const allowedRoles = ["admin", "supervisor", "contact", "vendor"];
+      if (!allowedRoles.includes(user.role)) {
         return {
           success: false,
           error: {
             name: "Acceso denegado",
-            message: "Solo administradores, supervisores y contactos de cliente pueden acceder al portal.",
+            message: "Solo administradores, supervisores, contactos de cliente y proveedores pueden acceder al portal.",
           },
         };
       }
@@ -28,8 +29,10 @@ export const authProvider: AuthProvider = {
       localStorage.setItem("refresh_token", refresh_token);
       localStorage.setItem("user", JSON.stringify(user));
 
-      // Clientes van directo a sus proyectos QC
-      const redirectTo = user.role === "contact" ? "/quality-control/projects" : "/";
+      // Clientes y proveedores van directo a sus proyectos QC
+      const redirectTo = (user.role === "contact" || user.role === "vendor")
+        ? "/quality-control/projects"
+        : "/";
       return { success: true, redirectTo };
     } catch (error: any) {
       return {
